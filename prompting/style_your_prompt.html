@@ -33,6 +33,24 @@
         background-color: rgba(50, 50, 50, 0.8);
       }
 
+      .copy_to_clipboard{
+        border: 1px solid #888;
+        border-radius: 4px;
+        background: #ccc;
+        position: relative;
+        margin-left: 10px;
+        cursor: pointer;
+        width: 20px;
+        left: -5px;
+        float: right;
+      }
+      .copy_to_clipboard:hover {
+        color: #ff5500;
+      }
+      .copy_to_clipboard:active {
+        color: #ff5500;
+      }
+
       #a_list{
         padding: 5px 25px;
       }
@@ -249,11 +267,11 @@
               <button id="randomize_button">run</button>
             </div>
           </div>
-          Processed prompt: <br>
+          Processed prompt: <small data-target="to_positive" class="copy_to_clipboard" title="copy to clipboard">copy</small><br>
           <textarea name="" id="to_positive" cols="30" rows="9"></textarea><br><br>
-          Recomended negative prompt: <br>
+          Recomended negative prompt: <small data-target="to_negative" class="copy_to_clipboard" title="copy to clipboard">copy</small><br>
           <textarea name="" id="to_negative" cols="30" rows="9"></textarea><br><br><br>
-          compiled: <br>
+          compiled: <small data-target="build_for_tele" class="copy_to_clipboard" title="copy to clipboard">copy</small><br>
           <textarea name="" id="build_for_tele" cols="30" rows="5"></textarea><br> 
         </div>
         <div class="right_panel" >
@@ -291,6 +309,15 @@
     </div>
     <script>
 
+      const copyClipboard = ( txt ) => {
+        var inp = document.createElement('textarea');
+        document.body.appendChild(inp);
+        inp.value = txt;
+        inp.select();
+        document.execCommand('copy',false);
+        inp.remove();
+      }
+
       function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -318,6 +345,8 @@
             this.elements = {
               switch_edit_mode: $$('#switch_edit_mode'),
               switch_mode: $$$('.switch_mode'),
+              
+              copy_to_clipboard: $$$('.copy_to_clipboard'),
 
               mix_limiter: $$('#mix_limiter'),
               mix_limiter_input: $$('#mix_limiter_input'),
@@ -444,7 +473,7 @@
             this.stack_items_for_randmoize = {
               prompt: allPrompts_finally,
               negative: allNegatives_finally,
-            };
+            }; 
 
           }
 
@@ -597,6 +626,18 @@
                 this.styles_list_render();
               } );
 
+            } );
+
+            const { copy_to_clipboard } = this.elements;
+
+            copy_to_clipboard.forEach( ( el, index ) => {
+              el.addEventListener( 'click', ( e ) => {
+                const target = el.dataset.target; 
+                console.log( ` target: ${ target }` );
+                const nextValue = $$(`#${target}`).value;
+                console.log( ` copied to clipboard: ${ nextValue }` );
+                copyClipboard( nextValue );
+              } );
             } );
 
           }
@@ -830,7 +871,7 @@
 
             const { mix_limiter_input } = this.elements; 
             const limitsFromInput = parseInt( mix_limiter_input.value ) || maxLimits;
-            const limitsFromInput_negative = Math.floor( limitsFromInput * 0.5 );
+            const limitsFromInput_negative = Math.floor( limitsFromInput * 0.7 );
  
             const allNames = [];
             let allPrompts = [];
@@ -905,12 +946,11 @@
             
             const { randomize_limiter_input } = this.elements; 
             const limitsFromInput = parseInt( randomize_limiter_input.value ) || maxLimits;
-            const limitsFromInput_negative = Math.floor( limitsFromInput * 0.5 );
+            const limitsFromInput_negative = Math.floor( limitsFromInput * 0.7 );
 
             let { prompt, negative } = this.stack_items_for_randmoize;
             prompt = shuffleArray( prompt );
             negative = shuffleArray( negative );
-
 
             const { prompt: allPrompts_finally, negative: allNegatives_finally } = this.compilePromptAndNegative( prompt, negative, limitsFromInput, limitsFromInput_negative );
             
