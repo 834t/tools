@@ -902,7 +902,7 @@
 
             return {
               name: allNames_finally.join(' + '),
-              prompt:  '{prompt},' + allPrompts_finally.join(', '),
+              prompt:  '{prompt}, ' + allPrompts_finally.join(', '),
               negative: allNegatives_finally.join(', '),
             };
           }
@@ -956,7 +956,7 @@
             
             this.render_finally_item( {
               name: 'random style',
-              prompt:  '{prompt},' + allPrompts_finally.join(', '),
+              prompt:  '{prompt}, ' + allPrompts_finally.join(', '),
               negative: allNegatives_finally.join(', '),
             } ); 
 
