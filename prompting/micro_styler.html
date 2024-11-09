@@ -1,0 +1,366 @@
+<html>
+  <head>
+    <link rel="icon" type="image/x-icon" href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZgAATU0AKgAAAAgABAEaAAUAAAABAAAAPgEbAAUAAAABAAAARgEoAAMAAAABAAIAAAExAAIAAAAQAAAATgAAAAAAAABgAAAAAQAAAGAAAAABcGFpbnQubmV0IDUuMC45AP/bAEMAAgEBAQEBAgEBAQICAgICBAMCAgICBQQEAwQGBQYGBgUGBgYHCQgGBwkHBgYICwgJCgoKCgoGCAsMCwoMCQoKCv/bAEMBAgICAgICBQMDBQoHBgcKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCv/AABEIABAAEAMBEgACEQEDEQH/xAAfAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgv/xAC1EAACAQMDAgQDBQUEBAAAAX0BAgMABBEFEiExQQYTUWEHInEUMoGRoQgjQrHBFVLR8CQzYnKCCQoWFxgZGiUmJygpKjQ1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4eLj5OXm5+jp6vHy8/T19vf4+fr/xAAfAQADAQEBAQEBAQEBAAAAAAAAAQIDBAUGBwgJCgv/xAC1EQACAQIEBAMEBwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGhscEJIzNS8BVictEKFiQ04SXxFxgZGiYnKCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2dri4+Tl5ufo6ery8/T19vf4+fr/2gAMAwEAAhEDEQA/APyt1zXNP+MGntp+nybkbhmFGuaHp/wf09tQ0+Pai8sor92xP1j2P/Crbl8tj8Dwv1X23/CTfm8w0PXNP+D+nrp+oSbUXhWNGh6Hp/xg09dQ1CPcjcqpp4X6z7Ff2Xbl8wxX1X2r/ta/N5H/2Q==">
+    <title>Micro Styler</title>
+    <style>
+      body{
+        font-family: monospace;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #0d0d0d;
+        color: #eee;
+      }
+      input{
+        background-color: rgba(255, 255, 255, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #eee;
+        border-radius: 8px;
+      }
+      textarea{
+        background-color: rgba(255, 255, 255, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: #eee;
+        border-radius: 8px;
+      }
+      .main-container{
+        display: inline-block;
+        margin: 0 50%;
+        transform: translate( -50%, 0 );
+        width: 1280px;
+        padding: 5px;
+        background-color: rgba(50, 50, 50, 0.8);
+      }
+
+      .copy_to_clipboard{
+        border: 1px solid #888;
+        border-radius: 4px;
+        background: #ccc;
+        position: relative;
+        margin-left: 10px;
+        cursor: pointer;
+        width: 20px;
+        left: -5px;
+        float: right;
+      }
+      .copy_to_clipboard:hover {
+        color: #ff5500;
+      }
+      .copy_to_clipboard:active {
+        color: #ff5500;
+      }
+
+      #a_list{
+        padding: 5px 25px;
+      }
+      a {
+        color: #eee;
+        clear: left;
+        display: block;
+        margin-top: 15px;
+      }
+      a:hover {
+        color: #ff5500;
+      }
+      a:active {
+        color: #ff5500;
+      }
+      
+      .inline_menu_item {
+        color: #eee;
+        clear: left;
+        display: inline-block;
+        margin: 5px 5px 5px 5px;
+        cursor: pointer;
+      }
+      .inline_menu_item:hover {
+        color: #ff5500;
+      }
+      .inline_menu_item:active {
+        color: #ff5500;
+      }
+
+
+      .left_panel{
+        padding-left: 10px;
+        width: 280px;
+        display: inline-block;
+        float: left;
+      }
+      .right_panel{
+        width: 980px;
+        display: inline-block;
+        float: left;
+        position: relative;
+      }
+      #styles_slider{
+        width: 100%;
+        height: 800px;
+        overflow-y: scroll;
+      }
+
+      #styles_slider .item{
+        width: 186px;
+        margin: 3px ;
+        display: inline-block;
+        cursor: pointer;
+        position: relative;
+      }
+      
+      #styles_slider .item.mixed{ 
+        box-shadow: 0 0 4px 4px #ee00ff;
+        border-radius: 8px;
+      }
+
+      #styles_slider .item img{
+        width: 100%;
+        height: 230px;
+        border-radius: 8px;
+      }
+
+      #styles_slider .item_name{
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        font-size: 16px;
+        text-shadow: 2px 3px 1px BLACK, 1px 0px 6px BLACK;
+      }
+
+      /* Стилізація для Chrome, Safari, Edge */
+      /* Весь скроллбар */
+      #styles_slider::-webkit-scrollbar {
+          width: 12px;
+      }
+
+      /* Трек (фон скроллбару) */
+      #styles_slider::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 10px;
+      }
+
+      /* Повзунок (слайдер) */
+      #styles_slider::-webkit-scrollbar-thumb {
+          background-color: #888;
+          border-radius: 10px;
+          border: 3px solid #f1f1f1; /* Відстань між слайдером та краями */
+      }
+
+      /* При наведенні миші */
+      #styles_slider::-webkit-scrollbar-thumb:hover {
+          background-color: #555;
+      }
+
+      /* Для Firefox */
+      #styles_slider {
+          scrollbar-width: thin; /* Тонкий скроллбар */
+          scrollbar-color: #888 #f1f1f1; /* Колір: слайдер і трек */
+      }
+
+      .board_section{
+        display: inline-block; 
+        float: left; 
+        margin-left: 5px;
+        margin-bottom: 10px;
+      }
+
+      small{
+        font-size: 10px;
+        color: #777;
+      }
+
+      .hidden{
+        visibility: hidden;
+        height: 0px;
+      } 
+
+      #tab_add_new_style textarea{
+        width: 500px;
+        height: 80px;
+      } 
+
+      .remove_icon{
+        position: absolute;
+        top: 0px;
+        right: 10px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      img.place_before{
+        border-left: 1px solid #ff5500;
+      }
+
+      #selected_style_name {
+        text-shadow: 3px 4px 0px #000;
+      }
+
+      .style_mixer_checkbox{
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+
+      .sub_navbar{
+
+      }
+
+      .sub_navbar span{
+        cursor: pointer;
+      }
+      .sub_navbar span:hover *{
+        color: #ff5500;
+      }
+      .sub_navbar span:active *{
+        color: #ff5500;
+      }
+
+      .sub_navbar span.active {
+        border-bottom: 1px solid #ff5500;
+      }
+
+    </style> 
+  </head>
+  <body>
+    <div class="main-container">
+
+      Your prompt: <br> 
+      <textarea cols="120" rows="9" name="" id="your_prompt"></textarea><br><br>
+      Number of sentences in a generated prompt: <input id="parts_number" type="number" min="1" max="20" step="1" value="5"><br><br>
+      Result prompt: <br> 
+      <textarea cols="120" rows="9" name="" id="result_prompt"></textarea><br><br>
+      UDI generator: <br> 
+      <textarea cols="120" rows="9" name="" id="udi_prompt"></textarea><br><br>
+
+      <button id="generate" >run filtering</button>
+
+    </div>
+    <script>
+
+      function countOccurrences(text, substring) {
+        const regex = new RegExp(substring, 'g');
+        const matches = text.match(regex);
+        const result = matches ? matches.length : 0;
+        console.log( { result } );
+        return result;
+      }
+
+      const copyClipboard = ( txt ) => {
+        var inp = document.createElement('textarea');
+        document.body.appendChild(inp);
+        inp.value = txt;
+        inp.select();
+        document.execCommand('copy',false);
+        inp.remove();
+      }
+
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      const $$ = ( selector ) => { return document.querySelector( selector ); }
+      const $$$ = ( selector ) => { return document.querySelectorAll( selector ); }
+
+      let CURRENT_STYLE_INDEX = 0;
+
+      let TEMPLATES = [
+          `{part1} {part2}`,
+          `{part1} {part2}`,
+          `{part1} by {part2}`,
+          `{part1} of {part2}`,
+          `{part2} of {part2}`,
+          `{part1} {part2} of {part2}`,
+          `{part1} and {part1} {part2}`,
+          `{part1} an {part1} {part2}`,
+          `{part1} but {part1} {part2}`,
+          `{part1} yet {part1} {part2}`,
+          `a {part2} of {part2} and {part2}`,
+          `a {part1} {part2} of {part1} and {part1} {part2}`,
+          `a {part1} {part2} of {part1} and {part1} {part1} {part2}`,
+          `{part1} {part2} {part2}`,
+          `{part1} {part2} and {part2}`,
+          `{part1} {part2} and {part1} {part2}`,
+          `{part1} {part1} {part2} {part2}`,
+          `{part1} {part1} {part2}`,
+          `{part1}-{part1} {part2}`,
+          `{part1} in {part2}`,
+      ];
+
+      let PART1_DATA = ["mystic","cute","balanced","moody","delicate","masterful","art","1930s","muted","dark","beautiful","cyberpunk","futuristic","elegant","dynamic","visual","intricate","vibrant","interactive","desaturated","centered","spatial","neonpunk","complex","refractive","contrasting","ethereal","painterly","digital","flowing","fluidity","retro","gentle","sharp","natural","neon","high contrast","fluid","rigid","otherworldly","blocky","high resolution","artistic","cursed","whimsical","surreal","rich","vintage","lively","superb","precise","focal","extra detailed","bold","mystical","circular","retro 70s","soft","pastel","vivid","starry","smooth","hypnotic","comic","lush","thunderous","earthy","noir","neon noir","eerie","reminiscent","energetic","urban","classic","fusion","75mm","cartoonish","immersive","structured","jagged","geometric","crystalline","segmented","deep","cosmic","expression","tactical","softened","punk rock","ambient","90's","breathtaking","isometric","cinematic","luminous","low light","abstract","textured","nature-inspired","amazing","exaggerated","absolutely","retro-futuristic","serene","tranquil","glowing","playful","1950's","innovative","unsettling","crayon","bold shadow","bright contrasting","diffuse","dreamlike","pixiv","obscure","retro-modernists","cartoon-style","film grain","imaginative","emotional","asymmetrical","visually","striking","digital art","transparent","soft lens","broken","rugged","industrial","enchanting","illusionary","cold and muted","mechanical","old school","renaissance","interwoven","soothing","tranquility","very","dramatic","organic","high polycount","harmonious","subtle","eye-catching","1920s","magical","hyper-detailed","bright pops","intense","elongated","icy","refined","mysterious","gorgeous","8k","Horror-themed","simple","cursedimages","minimalist","distinct","plain","50s","nuanced","intellectual","cool-toned","slight","pop art","dim","cybernetic","technology","clean","distressed","realistic","highly detailed","soft smooth","space-themed","60s","profound","hyperrealistic","extremely","gothic","illuminated","swirling","rich color","modern","1990s","heavy","high-tech","haunted","dreamy","enigmatic","black and white","horror","kaleidoscopic","floral","suspenseful","crisp","nostalgic","pulsating","unnatural","luminescent","chaotic","shadowy","35mm","trippy","spiraling","folded","intertwining","coastal","high-gloss","ornate","expressive","precision","electrifying","rounded","vector","sturdy","80s","distorted","action-packed","film noir","monochrome","ironic","1970s","silent","naive","eclectic","restored","cinemascope","thin","hazy","oversized","ultra detailed","epic","1950s","2D","impactful","shifting","technical","inverted","analog","incredibly","lifelike","simplified","mist-filled","inviting","exquisite","alluring","piercing light","tension-filled","rustic","meditative","captivating","intriguing","adorable","sci-fi","tech-inspired","property-focused","ancient","recognizable","frozen","mellow","chromatic","1940's","polaroid quality","glossy","mural","sculptural","sleek","metallic","atmospheric","magenta","liquid","fractured","bioluminescent","thick","somber","calming","traditional","casual","revolutionary","historical","unexpected","high budget","grand","dimensional","octane","stark","sophisticated","bubbling","pixelated","weird","confined","celestial","timeless","deformed","time-locked","rhythmic","engaging","provocative","curling","faded","cubist","half-stretched","psychedelic","fresh","contemplative","lyrical","uncluttered","charming","graphical","moonlit","reflective","airy","translucent","emotive","retrofuturistic","stunningly","neo-geo","post-apocalyptic","wonder","mystery","colorfull","fragmented","dense","cuteness","adaptive","rough","gradual","emerging","hidden","worn","rolling","cel","tangible","holographic","fine","Alien-themed","angular","raw","cheerful","incredible","hand-drawn","tribal","joyful","artificial","nightmarish","advanced","exotic","austere","weathered","temporal","aged","experimental","emphasizing","grainy","thought-provoking","stained","blending","wavy","tidal","flat-style","professional","ghosting","medieval","pleated","pinched","contorted","opulent","haunting","subdued","volumetric","photorealistic","oil","dirty","gritty","flat","drifting light","symbolic","coiling","faint","technicolor","heroic","introspective","ephemeral","viscous","bleak","rainy","focused","strict","religious","mythological","well-lit","cyber-grunge","optical","noisy","vast","ghostly","expansive","iridescent","majestic","amazingly","overgrown","blurred","fantastical","misty","magnetic","disco-themed","intertwined","ornamental","popular","kawaii","overexposed","ethnic","stacked","pulsing","matte","radiant","spooky","low-poly","intimate","royal"];
+      let PART2_DATA = ["allure","set","symmetry","atmosphere","linework","dithering","style","photo","vignetting","blues and grays","lighting","palette","aesthetics","design","tension","details","colors","elements","depth","patterns","shadows","light","distortion","complexity","dreamscape","painting","forms","accents","vibe","effects","signs","transitions","animation","structures","luminescence","thing","textures","anime","masterpiece","composition","lines","contrasts","visuals","graphic","illustration","greenery","movements","tones","ambiance","compositions","science-fiction","book-cover","lens","features","outlines","layers","palettes","shading","precision","shapes","feelings","edges","glow","darkness","hues","shot","expressionism","piperdraws","translucency","proportions","luminosity","realism","drawing","play","highlights","aesthetic","asymmetry","warmth","feel","fluidity","calm","strange","goldenhour","filigree","reflections","detailing","curves","angles","surfaces","scenery","background","blur","spectrum","trails","gradients","annotation","rhythm","grim","embraces","sense","experience","stasis","motifs","grunge","undertones","scheme","minimalism","focus","symbolism","influence","godrays","circuits","motion","flow","twists","perspective","brush strokes","connections","charm","surrealism","fractals","slicing","contours","joypixels","dynamism","intensity","streaks","harmony","influences","manipulation","mix","dystopia","silhouettes","dimensions","incorporating","divisions","fog","beams","rhythms","rendering","sheen","light sources","saturation","kitsch","shimmer","shine","flair","qualities","cryptid","symbols","essence","juxtapositions","framing","pleats","environments","shaping","figurine","handmade","haze","spaces","polygons","randomness","narratives","overload","adjustments","mesh","beauty","interpretation","grading","arrangements","photograph","glows","opalescence","fusion","elegance","curiosity","loops","pixels","stack","illusion","negative space","veins","bokeh","technology","landscapes","splashes","sketch","simplicity","themes","pixel-art","decay","foliage","modernity","bursts","clarity"];
+
+      window.onload = () => {
+
+        $$('#generate').addEventListener( 'click', () => {
+
+          const numberOfParts = parseInt( $$('#parts_number').value );
+
+          const chosen_templates = [];
+          let needed_part_1 = 0;
+          let needed_part_2 = 0; 
+          for( let i = 0; i < numberOfParts; i++ ){
+            const tmplates = shuffleArray( TEMPLATES ); 
+            const nextTemplate = tmplates[ Math.floor( tmplates.length * Math.random() ) ];
+            needed_part_1 += countOccurrences(nextTemplate, '{part1}');
+            needed_part_2 += countOccurrences(nextTemplate, '{part2}');
+            chosen_templates.push( nextTemplate );
+          }
+
+          let finally_part_1 = [];
+          let finally_part_2 = [];
+
+          while( finally_part_1.length < needed_part_1 ){
+            const part1_arr = shuffleArray( PART1_DATA );
+            const nextElement = part1_arr[ Math.floor( part1_arr.length * Math.random() ) ];
+            if(!finally_part_1.includes(nextElement)) finally_part_1.push(nextElement);
+          }
+
+          while( finally_part_2.length < needed_part_2 ){
+            const part2_arr = shuffleArray( PART2_DATA );
+            const nextElement = part2_arr[ Math.floor( part2_arr.length * Math.random() ) ];
+            if(!finally_part_2.includes(nextElement)) finally_part_2.push(nextElement);
+          }
+
+
+          const processed_templates = [];
+          
+          console.log({ chosen_templates, finally_part_1, finally_part_2 });
+
+          for( const nextTemplate of chosen_templates ){
+            const resultNextTemplate = nextTemplate.replace(/{part1}|{part2}/g, (match) => {
+              finally_part_1 = shuffleArray( finally_part_1 );
+              finally_part_2 = shuffleArray( finally_part_2 );
+              if (match === '{part1}') {
+                return finally_part_1.shift() || '';
+              } else if (match === '{part2}') {
+                return finally_part_2.shift() || '';
+              }
+            });
+            console.log({ resultNextTemplate });
+            processed_templates.push( resultNextTemplate );
+          }
+
+          const your_prompt = $$('#your_prompt').value;
+
+          const result_prompt = `${your_prompt}, ${ processed_templates.join(', ') }`;
+          $$('#result_prompt').value = result_prompt;
+
+          $$('#udi_prompt').value = `!gen ${result_prompt} --size 864x1152`;
+
+        } );
+
+
+      }
+
+    </script>
+
+    
+  </body>
+</html>
