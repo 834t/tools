@@ -28,7 +28,7 @@
         display: inline-block;
         margin: 0 50%;
         transform: translate( -50%, 0 );
-        width: 1280px;
+        width: 904px;
         padding: 5px;
         background-color: rgba(50, 50, 50, 0.8);
       }
@@ -227,15 +227,34 @@
   <body>
     <div class="main-container">
 
-      Your prompt: <br> 
+      Your prompt: <br><br>  
       <textarea cols="120" rows="9" name="" id="your_prompt"></textarea><br><br>
       Number of sentences in a generated prompt: <input id="parts_number" type="number" min="1" max="20" step="1" value="5"><br><br>
-      Result prompt: <br> 
+      Result prompt: <br><br>  
       <textarea cols="120" rows="9" name="" id="result_prompt"></textarea><br><br>
-      UDI generator: <br> 
+      UDI generator: <br>
+      Size: <select name="" id="udi_size">
+        <option value="512x512">512x512</option>
+        <option value="512x768">512x768</option>
+        <option value="768x512">768x512</option>
+        <option value="1024x1024">1024x1024</option>
+        <option value="1152x864">1152x864</option>
+        <option value="864x1152" selected>864x1152</option>
+        <option value="1248x832">1248x832</option>
+        <option value="832x1248">832x1248</option>
+        <option value="1344x768">1344x768</option>
+        <option value="768x1344">768x1344</option>
+      </select> | 
+      model: <select name="" id="udi_model">
+        <option value="" selected> default </option>
+        <option value="--flux"> Flux </option>
+        <option value="--dream"> dream </option>
+      </select> 
+      <span data-target="udi_prompt" class="copy_to_clipboard" style="width: 30px;">copy</span>
+      <br><br>  
       <textarea cols="120" rows="9" name="" id="udi_prompt"></textarea><br><br>
 
-      <button id="generate" >run filtering</button>
+      <button id="generate" >Generate Prompt</button>
 
     </div>
     <script>
@@ -244,7 +263,6 @@
         const regex = new RegExp(substring, 'g');
         const matches = text.match(regex);
         const result = matches ? matches.length : 0;
-        console.log( { result } );
         return result;
       }
 
@@ -298,6 +316,23 @@
 
       window.onload = () => {
 
+        let FINALLY_PROMPT = '';
+
+        const combineUdiPrompt = () => {
+          const size_ = $$('#udi_size').value;
+          const model_ = $$('#udi_model').value;
+          $$('#udi_prompt').value = `!gen ${FINALLY_PROMPT} --size ${size_} ${model_}`;
+        }
+
+        
+        $$$('.copy_to_clipboard').forEach( ( el, index ) => {
+          el.addEventListener( 'click', ( e ) => {
+            const target = el.dataset.target;  
+            const nextValue = $$(`#${target}`).value; 
+            copyClipboard( nextValue );
+          } );
+        } );
+
         $$('#generate').addEventListener( 'click', () => {
 
           const numberOfParts = parseInt( $$('#parts_number').value );
@@ -331,7 +366,7 @@
 
           const processed_templates = [];
           
-          console.log({ chosen_templates, finally_part_1, finally_part_2 });
+          // console.log({ chosen_templates, finally_part_1, finally_part_2 });
 
           for( const nextTemplate of chosen_templates ){
             const resultNextTemplate = nextTemplate.replace(/{part1}|{part2}/g, (match) => {
@@ -343,19 +378,26 @@
                 return finally_part_2.shift() || '';
               }
             });
-            console.log({ resultNextTemplate });
+            // console.log({ resultNextTemplate });
             processed_templates.push( resultNextTemplate );
           }
 
           const your_prompt = $$('#your_prompt').value;
 
-          const result_prompt = `${your_prompt}, ${ processed_templates.join(', ') }`;
-          $$('#result_prompt').value = result_prompt;
+          FINALLY_PROMPT = `${your_prompt}, ${ processed_templates.join(', ') }`;
+          $$('#result_prompt').value = FINALLY_PROMPT;
 
-          $$('#udi_prompt').value = `!gen ${result_prompt} --size 864x1152`;
+          combineUdiPrompt();
 
         } );
 
+        $$('#udi_size').addEventListener( 'change', () => {
+          combineUdiPrompt();
+        } );
+
+        $$('#udi_model').addEventListener( 'change', () => {
+          combineUdiPrompt();
+        } );
 
       }
 
