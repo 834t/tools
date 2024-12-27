@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wildcards constructor</title>
+    <style>
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #1f1f1f;
+        }
+        .left, .right {
+            border: 1px solid #ddd;
+            padding: 10px;
+            overflow: auto;
+        }
+        .left {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+        }
+        .tags {
+            flex: 1;
+            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #3a3a3a;
+            color: #fafafa;
+        }
+        .tags span {
+            display: inline-block;
+            padding: 2px 6px;
+            margin: 2px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: grab;
+        }
+        .tags span.dragging {
+            opacity: 0.5;
+        }
+        .workspace {
+            flex: 2;
+            padding: 10px;
+            background: #3a3a3a;
+            color: #fafafa;
+            font-family: monospace;
+        }
+        .right {
+            flex: 2;
+        }
+        .tree {
+          color: #fafafa;
+        }
+        .tree ul {
+            list-style-type: none;
+            padding-left: 20px;
+            border-left: 1px solid #ccc;
+            margin-left: 10px;
+        }
+        .tree li {
+            padding: 2px 4px 2px 4px ;
+            border: 1px solid #eeeeee;
+            background: #181818;
+            cursor: pointer;
+            margin: 5px 0;
+            position: relative;
+        }
+        .tree li::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -10px;
+            width: 10px;
+            height: 1px;
+            background: #ccc;
+        }
+        .tree li::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -10px;
+            width: 1px;
+            height: 100%;
+            background: #ccc;
+        }
+        .tree li:last-child::after {
+            height: 10px;
+        }
+        .tree li.folded{
+          background: #494949;
+        }
+        .tree li.folded > ul {
+            display: none;
+        }
+        .tree li.folded > pre {
+            display: none;
+        }
+        .tree li pre {
+            background: #464646;
+            padding: 5px;
+        }
+        button {
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .generate-button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="left"> 
+        <div id="tags" class="tags" contenteditable="true"></div>
+        <div id="workspace" class="workspace">
+            <!-- Generated output will appear here -->
+        </div>
+        <button id="generate" class="generate-button">Generate</button>
+    </div>
+    <div class="right">
+        <div class="navbar">
+          <button id="replace_wildcards_json">replace wildcards json</button>
+        </div>
+        <div class="tree" id="tree">
+            <!-- JSON tree will be dynamically generated here -->
+        </div>
+    </div>
+
+    <script>
+      
+        const LOCAL_STORAGE_ROW_NAME = '834t_wildcards_constructor';
+
+        const updateLocalStorage = () => {
+          const textContent = document.querySelector('.tags').innerText;
+          localStorage.setItem( LOCAL_STORAGE_ROW_NAME, textContent ); 
+        };
+
+        let savedRange = null;
+ 
+        function insertTextAtCaret( text ) {
+            if (savedRange) {
+                console.log( { savedRange } );
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(savedRange);
+                savedRange.deleteContents();
+                const textNode = document.createTextNode(text);
+                savedRange.insertNode(textNode);
+                savedRange.setStartAfter(textNode);
+                savedRange.setEndAfter(textNode);
+                selection.removeAllRanges();
+                selection.addRange(savedRange);
+                updateLocalStorage();
+            }
+        }
+
+        const stopEvent = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        function getValueByPath(data, path) {
+            const keys = path.split('.');
+            let result = data;
+            for (const key of keys) {
+                if (result && key in result) {
+                    result = result[key];
+                } else {
+                    return [];
+                }
+            }
+            function collectArrays(node) {
+                if (Array.isArray(node)) return node;
+                if (typeof node === 'object' && node !== null) {
+                    return Object.values(node).flatMap(collectArrays);
+                }
+                return [];
+            }
+            return collectArrays(result);
+        }
+  
+        class Tree {
+
+            constructor(data, container) {
+                this.data = data;
+                this.container = container;
+                this.knots = [];
+                this.replaceTree( this.data );
+            } 
+
+            buildTree(obj, path) {
+
+                const ul = document.createElement('ul');
+ 
+                for (const key in obj) {
+                    const li = document.createElement('li');
+                    const currentPath = path ? `${path}.${key}` : key;
+                    li.textContent = key;
+                    li.classList.add('folded');  
+
+                    const addButton = ( _li, buttonMarker = "<", title = '' ) => {
+                        const testButton = document.createElement('button');
+                        testButton.innerText = buttonMarker;
+                        testButton.title = title;
+                        testButton.addEventListener( 'click', ( e ) => { 
+                          const nextTagPath = `@@${currentPath}@@ `;
+                          insertTextAtCaret( nextTagPath ); 
+                          stopEvent(e);
+                        });
+                        _li.appendChild( testButton );
+                    };
+
+                    li.addEventListener( 'click', ( e ) => {
+                      stopEvent(e);
+                      if( !li.classList.contains('folded') ){
+                        li.classList.add('folded');
+                      } else {
+                        li.classList.remove('folded');
+                      }
+                    } );
+
+                    if (Array.isArray(obj[key])) {
+                        addButton( li, '+', 'set wild path to current category' );
+                        li.appendChild( document.createElement('br') );
+                        const nextPre = document.createElement('pre');
+                        nextPre.innerText = obj[key].join('\n');
+                        nextPre.addEventListener( 'click', ( e ) => { stopEvent(e); });
+                        li.appendChild( nextPre );
+                    } else {
+                        addButton( li, '<', 'set wild path to all categories below' );
+                        const childUl = this.buildTree( obj[key], currentPath);
+                        li.appendChild(childUl);
+                    }
+                    ul.appendChild(li);
+                }
+
+                this.container.appendChild( ul );
+
+                return ul;
+            }
+
+            replaceTree( obj ){ 
+              this.container.innerHTML = null;
+              this.data = obj;
+              this.buildTree( this.data, '' );
+            }
+
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const tagsContainer = document.querySelector('.tags');
+            const workspace = document.querySelector('.workspace');
+            const treeContainer = document.getElementById('tree');
+
+            tagsContainer.addEventListener( "blur", () => {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) savedRange = selection.getRangeAt(0);
+            });
+
+            tagsContainer.addEventListener( "input", () => {
+                updateLocalStorage();
+            });
+
+            tagsContainer.addEventListener( 'paste', function (event) {
+                event.preventDefault();
+                const text = (event.clipboardData || window.clipboardData).getData('text');
+                document.execCommand('insertText', false, text);
+            });
+
+            const lastPrompt = localStorage.getItem( LOCAL_STORAGE_ROW_NAME );
+            if( lastPrompt ) tagsContainer.innerText = lastPrompt;
+
+            const testTree = new Tree(constructor_database, treeContainer);
+
+            console.log( { testTree } );
+  
+            const generateButton = document.getElementById('generate');
+            generateButton.addEventListener( 'click', () => {
+              const tags_field = document.getElementById( 'tags' );
+              const workspace = document.getElementById( 'workspace' );
+              const result = tags_field.innerText.replace(/@@(.*?)@@/g, (_, key) => {
+                  const values = getValueByPath( testTree.data, key );
+                  if (Array.isArray(values)) {
+                      return values[Math.floor(Math.random() * values.length)];
+                  }
+                  return `@@${key}@@`;
+              });
+              workspace.innerText = result;
+            } );
+
+            const getJson = (()=>{
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.txt,.json';
+                fileInput.multiple = true;
+                let _callback = ()=>{};
+                let _err = ()=>{};
+                fileInput.addEventListener( 'change', async () => {
+                    for( const file of fileInput.files ){
+                        await new Promise( ( resolve, reject ) => {
+                            const fr = new FileReader();
+                            fr.onload = () => { 
+                                const result = fr.result; 
+                                WILDCARDS_DATA = new Function(`return ${ result.replaceAll('\n','')};`)();
+                                _callback( WILDCARDS_DATA );
+                                resolve();
+                            };
+                            fr.onerror = ( err ) => {
+                              _err( err );
+                              reject( err );
+                            }
+                            fr.readAsText( file );
+                        } );
+                    }
+                    fileInput.value = null;
+                } );
+                return function( callback, err ){
+                  _callback = callback;
+                  _err = err;
+                  fileInput.click();
+                };
+            })();
+
+            const replaceJsonButton = document.getElementById('replace_wildcards_json');
+            replaceJsonButton.addEventListener( 'click', () => {
+              console.log('test');
+              getJson( ( resultData ) => {
+                  console.log( { resultData } );
+                  testTree.replaceTree( resultData );
+              }, ( errorReson ) => {
+                console.warn( errorReson );
+              } );
+            });
+
+        });
+        
+  const constructor_database = {
+    "primitives": {
+      number: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99],
+      colors: ["red", "blue", "green", "yellow", "orange", "purple", "pink", "brown", "black", "white", "gray", "cyan", "magenta", "lime", "teal", "navy", "maroon", "olive", "silver", "gold", "beige", "ivory", "coral", "salmon", "peach", "indigo", "violet", "turquoise", "lavender", "khaki", "tan", "mint", "chocolate", "plum", "crimson", "amber", "emerald", "sapphire", "ruby", "aquamarine", "azure", "sepia", "orchid", "chartreuse", "fuchsia", "periwinkle", "cerulean", "mauve", "carmine", "vermillion", "ochre"],
+      shape2d: ["circle", "square", "rectangle", "triangle", "pentagon", "hexagon", "heptagon", "octagon", "nonagon", "decagon", "ellipse", "parallelogram", "trapezoid", "rhombus", "kite", "star", "crescent", "oval", "semicircle", "sector", "annulus", "heart", "arrow", "diamond", "cross", "chevron", "polygon", "hexagram", "quadrilateral", "lozenge"],
+      shape2d_mange: ["circle", "square", "rectangle", "triangle", "pentagon", "hexagon", "ellipse", "parallelogram", "trapezoid", "rhombus", "star", "cloud", "speech bubble", "thought bubble", "heart", "arrow", "burst", "zigzag", "wave", "spiral", "crescent", "polygon", "cross", "chevron", "annulus", "blob", "lightning", "explosion", "frame", "banner"],
+      shape3d: ["cube", "sphere", "cylinder", "cone", "pyramid", "rectangular prism", "triangular prism", "tetrahedron", "octahedron", "dodecahedron", "icosahedron", "torus", "ellipsoid", "hemisphere", "capsule", "paraboloid", "hyperboloid", "cuboid", "frustum", "truncated pyramid", "triangular pyramid", "pentagonal prism", "hexagonal prism", "oblate spheroid", "prolate spheroid", "ring", "wedge", "pillow", "dumbbell", "stellated polyhedron"],
+      shape3d_manga: ["cube", "sphere", "cylinder", "cone", "pyramid", "rectangular prism", "tetrahedron", "torus", "ellipsoid", "hemisphere", "capsule", "frustum", "triangular prism", "pentagonal prism", "hexagonal prism", "spiral", "cloud", "bubble", "burst", "ring", "star-shaped prism", "spike", "waveform", "gear", "gem", "crystal shard", "comet trail", "explosion fragment", "stalactite", "meteorite"],
+      material_fabric: ["cotton", "wool", "silk", "linen", "denim", "leather", "suede", "velvet", "satin", "polyester", "nylon", "spandex", "rayon", "cashmere", "tweed", "corduroy", "canvas", "felt", "chiffon", "lace", "organza", "georgette", "flannel", "jersey", "knit", "mesh", "tulle", "hemp", "burlap", "lycra", "gabardine", "herringbone", "brocade", "damask", "terrycloth", "fleece", "microfiber", "plush", "modal", "viscose", "jacquard", "crepe", "tartan", "seersucker", "chambray", "shantung", "batik", "ripstop", "gore-tex", "vinyl"],
+      material_stone: ["granite", "marble", "limestone", "sandstone", "slate", "basalt", "quartzite", "soapstone", "travertine", "onyx", "obsidian", "jade", "alabaster", "gneiss", "schist", "dolomite", "chalk", "shale", "flint", "agate", "amber", "topaz", "amethyst", "citrine", "opal", "ruby", "sapphire", "emerald", "diamond", "peridot", "garnet", "lapis lazuli", "malachite", "turquoise", "moonstone", "kyanite", "zircon", "coral", "pyrite", "tiger's eye", "hematite", "jasper", "carnelian", "aquamarine", "spinel", "tourmaline", "beryl", "feldspar", "mica", "pegmatite"],
+      material_metall: ["steel", "adamantium", "mithril", "oblivionium", "dragonsilver", "tungsten", "enchanted iron", "vibranium", "froststeel", "soulstone", "celestium", "shadowmetal", "phoenixium", "arcane brass", "bloodsteel", "moonstone", "sunforged alloy", "stariron", "darksteel", "earthshard", "elvenite", "lightsteel", "stormbrass", "cryptic ore", "shadowstone", "adamantite", "ghostmetal", "firegold", "wraithsilver", "dragonbone", "crystalium", "stonefire", "abyssium", "arcsteel", "soulmetal", "dawnsteel", "silverlight", "runestone", "thundershard", "blackgold", "cobaltite", "magma ore", "iridium", "etherium", "stardust alloy", "stormsteel", "voidsteel", "dreamstone", "gravitite", "ironsilver"],
+      character_appierance: ["terrible", "adorable", "cute", "furious", "majestic", "elegant", "intimidating", "radiant", "beautiful", "mysterious", "dazzling", "charming", "ferocious", "graceful", "mighty", "gorgeous", "handsome", "mischievous", "bold", "angelic", "gloomy", "alluring", "stoic", "fierce", "whimsical", "rugged", "serene", "untamed", "enchanting", "glamorous", "stunning", "terrifying", "mesmerizing", "chiseled", "sophisticated", "scruffy", "exotic", "innocent", "flawless", "demonic", "radiant", "delicate", "mighty", "colossal", "playful", "chilly", "intellectual", "dark"],
+    },
+    "weapon": {
+      fantasy: {
+        "blunt": [
+          "Iron Club",
+          "Wooden Mallet",
+          "Spiked Mace",
+          "Stone Hammer",
+          "Meteor Hammer",
+          "Bo Staff",
+          "Warhammer",
+          "Morning Star",
+          "Ceremonial Mace",
+          "Steel Baton",
+          "Giant Mallet",
+          "Bone Club",
+          "Ogre's Hammer",
+          "Reinforced Staff",
+          "Tetsubo",
+          "Rock Crusher",
+          "Magic Hammer",
+          "Training Rod",
+          "Shillelagh",
+          "Impact Gauntlet"
+        ],
+        "stuff": [
+          "Wizard's Staff",
+          "Crystal Rod",
+          "Ancient Scepter",
+          "Flame Staff",
+          "Frost Wand",
+          "Arcane Staff",
+          "Lightning Rod",
+          "Healing Scepter",
+          "Shadow Wand",
+          "Holy Staff",
+          "Enchanted Branch",
+          "Dragonbone Staff",
+          "Staff of Illusions",
+          "Lunar Rod",
+          "Solar Scepter",
+          "Demonic Wand",
+          "Celestial Staff",
+          "Nature's Staff",
+          "Gilded Rod",
+          "Void Scepter"
+        ],
+        "swords": [
+          "Katana",
+          "Claymore",
+          "Short Sword",
+          "Longsword",
+          "Rapier",
+          "Scimitar",
+          "Greatsword",
+          "Broadsword",
+          "Dagger",
+          "Cutlass",
+          "Nodachi",
+          "Twin Blades",
+          "Samurai Sword",
+          "Rune Blade",
+          "Firebrand",
+          "Icefang",
+          "Shadow Blade",
+          "Holy Avenger",
+          "Demon Slayer",
+          "Lightning Saber"
+        ],
+        "bows": [
+          "Shortbow",
+          "Longbow",
+          "Recurve Bow",
+          "Crossbow",
+          "Compound Bow",
+          "Elven Bow",
+          "Dragonbone Bow",
+          "Magic Bow",
+          "Hunter's Bow",
+          "War Bow",
+          "Sniper's Bow",
+          "Shadow Bow",
+          "Phoenix Bow",
+          "Frost Bow",
+          "Flame Bow",
+          "Thunder Bow",
+          "Celestial Bow",
+          "Demonic Bow",
+          "Lunar Bow",
+          "Solar Bow"
+        ],
+        "daggers": [
+          "Throwing Knife",
+          "Stiletto",
+          "Dirk",
+          "Shadow Fang",
+          "Venom Dagger",
+          "Assassin's Blade",
+          "Curved Dagger",
+          "Dragonfang",
+          "Obsidian Blade",
+          "Crimson Dagger",
+          "Frostfang",
+          "Flame Dagger",
+          "Lightning Fang",
+          "Silver Stiletto",
+          "Golden Dirk",
+          "Poison Fang",
+          "Twin Daggers",
+          "Dagger of Illusions",
+          "Dagger of Night",
+          "Spectral Fang"
+        ],
+        "axes": [
+          "Battle Axe",
+          "Throwing Axe",
+          "Great Axe",
+          "Tomahawk",
+          "Double-Bladed Axe",
+          "Viking Axe",
+          "War Axe",
+          "Fire Axe",
+          "Frost Axe",
+          "Shadow Axe",
+          "Dragonbone Axe",
+          "Lumberjack's Axe",
+          "Reinforced Axe",
+          "Golden Axe",
+          "Silver Axe",
+          "Blood Axe",
+          "Rune Axe",
+          "Lightning Cleaver",
+          "Demon Axe",
+          "Heavenly Cleaver"
+        ],
+        "shields": [
+          "Wooden Shield",
+          "Iron Shield",
+          "Tower Shield",
+          "Buckler",
+          "Round Shield",
+          "Kite Shield",
+          "Dragon Shield",
+          "Magic Barrier",
+          "Crystal Shield",
+          "Reinforced Shield",
+          "Holy Shield",
+          "Shadow Guard",
+          "Spiked Shield",
+          "Rune Shield",
+          "Phoenix Guard",
+          "Ice Shield",
+          "Flame Barrier",
+          "Storm Shield",
+          "Celestial Guard",
+          "Demonic Aegis"
+        ],
+        "others": [
+          "Chakram",
+          "Kunai",
+          "Throwing Star",
+          "Whip",
+          "Chain Scythe",
+          "Boomerang",
+          "Energy Blade",
+          "Magic Tome",
+          "Gunblade",
+          "Laser Bow",
+          "Flamethrower",
+          "Gauntlet Blade",
+          "Energy Gauntlet",
+          "Gun Staff",
+          "Sickle",
+          "Explosive Cards",
+          "Fan Blades",
+          "Magic Orb",
+          "Claw Gauntlets",
+          "Rocket Launcher"
+        ]
+      }
+    },
+    "environments": {
+      "futuristic_landscape": [
+        "glowing neon skyscrapers",
+        "hovering vehicles",
+        "towering digital billboards",
+        "holographic trees and plants",
+        "futuristic bridges of light",
+        "endless city skyline",
+        "floating gardens",
+        "energy-efficient solar panels",
+        "drones zipping through the air",
+        "bright, reflective surfaces"
+      ],
+      "hightech_city": [
+        "smart glass buildings",
+        "autonomous transportation systems",
+        "interactive digital streets",
+        "robotic street vendors",
+        "solar-powered streetlights",
+        "sustainable green rooftops",
+        "high-speed maglev trains",
+        "AI-controlled urban spaces",
+        "digital currency kiosks",
+        "urban air mobility pads"
+      ],
+      "spaceship_interior": [
+        "sleek metallic surfaces",
+        "interactive touch screens",
+        "holographic navigation panels",
+        "ambient lighting with soft glows",
+        "zero-gravity chambers",
+        "advanced AI assistants",
+        "transparent viewports showing stars",
+        "floating storage compartments",
+        "humming energy reactors",
+        "comfortable ergonomic seating"
+      ],
+      "psychedelic_environment": [
+        "vibrant swirling colors",
+        "morphing geometric patterns",
+        "floating abstract shapes",
+        "shifting landscapes of neon hues",
+        "disorienting optical illusions",
+        "glowing fractals",
+        "intense kaleidoscopic visuals",
+        "elastic time distortions",
+        "bending reality",
+        "mind-bending reflections"
+      ],
+      "tropical": [
+        "lush palm trees",
+        "humid rainforest canopy",
+        "bright exotic flowers",
+        "chirping tropical birds",
+        "dense jungle foliage",
+        "clear turquoise lagoons",
+        "warm sandy beaches",
+        "mangrove swamps",
+        "coconut-laden shores",
+        "sunlit coral reefs"
+      ],
+      "beach": [
+        "soft golden sand",
+        "gentle ocean waves",
+        "colorful beach umbrellas",
+        "distant sailing boats",
+        "warm sunlit shores",
+        "seashell-strewn tide lines",
+        "dune grasses swaying",
+        "seagulls circling overhead",
+        "shimmering blue waters",
+        "tide pools with crabs"
+      ],
+      "rocky_coast": [
+        "jagged cliff edges",
+        "crashing ocean waves",
+        "windswept rocky shores",
+        "seaweed-covered boulders",
+        "misty sea spray",
+        "barnacle-encrusted stones",
+        "hidden tidal caves",
+        "lonely coastal lighthouses",
+        "stormy grey skies",
+        "pebbled beach stretches"
+      ],
+      "winter": [
+        "snow-covered pine trees",
+        "frozen winding rivers",
+        "frosty morning air",
+        "glittering icicles hanging",
+        "snowflakes gently falling",
+        "crisp white landscapes",
+        "snowdrifts along fences",
+        "footprints in fresh snow",
+        "frozen mountain peaks",
+        "distant howling winds"
+      ],
+      "desert": [
+        "golden rolling dunes",
+        "cracked dry earth",
+        "endless sandy horizons",
+        "blazing midday sun",
+        "towering sandstone formations",
+        "oasis with palm trees",
+        "scattered desert shrubs",
+        "distant mirages shimmering",
+        "ancient caravan trails",
+        "cool desert nights"
+      ],
+      "fields": [
+        "rolling green hills",
+        "wildflowers in bloom",
+        "soft grassy meadows",
+        "dancing wheat fields",
+        "sunset-drenched horizons",
+        "buzzing honeybees nearby",
+        "wind gently rustling crops",
+        "hidden rural pathways",
+        "grazing farm animals",
+        "farmer’s wooden fences"
+      ],
+      "mountains": [
+        "towering rocky peaks",
+        "misty alpine vistas",
+        "snowy mountain ridges",
+        "sparkling glacial lakes",
+        "steep winding trails",
+        "rugged cliff faces",
+        "clouds brushing summits",
+        "pine forests below",
+        "echoing distant avalanches",
+        "eagles soaring high"
+      ],
+      "forest": [
+        "dense towering trees",
+        "sunlight streaming through leaves",
+        "soft mossy forest floors",
+        "rustling woodland creatures",
+        "chirping songbirds nearby",
+        "hidden forest clearings",
+        "gnarled ancient roots",
+        "cool shaded glades",
+        "fragrant pine needles",
+        "mushrooms dotting pathways"
+      ],
+      "city": [
+        "bustling crowded streets",
+        "towering glass skyscrapers",
+        "honking car horns",
+        "neon signs glowing brightly",
+        "lively street markets",
+        "subway trains rumbling",
+        "cafes with outdoor seating",
+        "busy pedestrian crosswalks",
+        "streetlights in the rain",
+        "parks amid tall buildings"
+      ],
+      "village": [
+        "quaint cobblestone streets",
+        "rustic wooden cottages",
+        "small market squares",
+        "flower-filled window boxes",
+        "gently smoking chimneys",
+        "children playing outside",
+        "bustling village taverns",
+        "fields surrounding houses",
+        "villagers chatting warmly",
+        "stone bridges over streams"
+      ],
+      "royal": [
+        "grand palace halls",
+        "marble columns glistening",
+        "gold-trimmed furnishings",
+        "luxurious red carpets",
+        "stained glass windows",
+        "guards in shining armor",
+        "chandeliers glittering brightly",
+        "ornate wooden thrones",
+        "richly embroidered tapestries",
+        "immaculate palace gardens"
+      ],
+      "cave": [
+        "dark winding tunnels",
+        "glistening stalactites above",
+        "echoing water drips",
+        "hidden underground lakes",
+        "glowing bioluminescent fungi",
+        "narrow rocky passages",
+        "cool damp air",
+        "shimmering crystal formations",
+        "bats fluttering in shadows",
+        "ancient carved walls"
+      ]
+    },
+    "nations": {
+      "Africa": [
+        "Zulu",
+        "Hausa",
+        "Yoruba",
+        "Igbo",
+        "Amhara",
+        "Somali",
+        "Berber",
+        "Oromo",
+        "Shona",
+        "Xhosa",
+        "Tutsi",
+        "San",
+        "Tuareg",
+        "Akan",
+        "Fulani"
+      ],
+      "Asia": [
+        "Han Chinese",
+        "Japanese",
+        "Korean",
+        "Thai",
+        "Tibetan",
+        "Indian",
+        "Persian",
+        "Arab",
+        "Mongol",
+        "Malay",
+        "Burmese",
+        "Turkic",
+        "Khmer",
+        "Vietnamese",
+        "Hmong"
+      ],
+      "Europe": [
+        "English",
+        "German",
+        "French",
+        "Italian",
+        "Spanish",
+        "Russian",
+        "Polish",
+        "Greek",
+        "Dutch",
+        "Swedish",
+        "Norwegian",
+        "Finnish",
+        "Scottish",
+        "Irish",
+        "Danish"
+      ],
+      "North America": [
+        "Cherokee",
+        "Navajo",
+        "Sioux",
+        "Mayan",
+        "Inuit",
+        "Cree",
+        "Apache",
+        "Blackfoot",
+        "Aztec",
+        "Mohawk",
+        "Chinook",
+        "Hopi",
+        "Zuni",
+        "Iroquois",
+        "Seminole"
+      ],
+      "South America": [
+        "Quechua",
+        "Aymara",
+        "Guarani",
+        "Mapuche",
+        "Tupi",
+        "Yanomami",
+        "Kayapo",
+        "Munduruku",
+        "Chibcha",
+        "Carib",
+        "Warao",
+        "Tikuna",
+        "Ashaninka",
+        "Bororo",
+        "Makushi"
+      ],
+      "Oceania": [
+        "Maori",
+        "Aboriginal Australian",
+        "Samoan",
+        "Tongan",
+        "Fijian",
+        "Papuan",
+        "Hawaiian",
+        "Micronesian",
+        "Polynesian",
+        "Melanesian",
+        "Chamorro",
+        "Ni-Vanuatu",
+        "Pitcairn Islander",
+        "Cook Islander",
+        "Tahitian"
+      ]
+    },
+    "character": {
+      "male": [
+        "man",
+        "boy",
+        "fella",
+        "oldman",
+        "bro",
+        "gentleman",
+        "dude",
+        "chap",
+        "lad",
+        "sir"
+      ],
+      "female": [
+        "girl",
+        "woman",
+        "gal",
+        "wench",
+        "lady",
+        "miss",
+        "maiden",
+        "lass",
+        "dame",
+        "madam"
+      ],
+      "beast": [
+        "wolf",
+        "bear",
+        "lion",
+        "tiger",
+        "serpent",
+        "crocodile",
+        "eagle",
+        "shark",
+        "boar",
+        "panther",
+        "hyena",
+        "vulture",
+        "raven",
+        "jaguar",
+        "mongoose"
+      ],
+      "fantasy": [
+        "dragon",
+        "unicorn",
+        "goblin",
+        "elf",
+        "orc",
+        "dwarf",
+        "troll",
+        "fairy",
+        "phoenix",
+        "mermaid",
+        "griffin",
+        "hydra",
+        "centaur",
+        "minotaur",
+        "sphinx",
+        "basilisk",
+        "lich",
+        "djinn",
+        "wyvern",
+        "naga",
+        "golem",
+        "kraken",
+        "harpy",
+        "chimaera",
+        "vampire",
+        "werewolf",
+        "shade",
+        "banshee",
+        "selkie",
+        "kelpie",
+        "dryad",
+        "satyr"
+      ]
+    },
+    image_composition: {
+        view_angle: [
+            "dutch angle",
+            "from above",
+            "from behind",
+            "from below",
+            "from side",
+            "high up",
+            "multiple views",
+            "sideways",
+            "straight-on",
+            "three quarter view",
+            "upside-down"
+        ],
+        perspective: [
+            "atmospheric perspective",
+            "fisheye",
+            "panorama",
+            "perspective",
+            "vanishing point",
+            "variations"
+        ],
+        composition: [
+            "afterimage",
+            "border",
+            "fading border",
+            "inset border",
+            "ornate border",
+            "outside border",
+            "rounded corners",
+            "viewfinder",
+            "chart",
+            "bust chart",
+            "character chart",
+            "reference sheet",
+            "diagram",
+            "move chart",
+            "relationship graph",
+            "seating chart",
+            "stats",
+            "collage",
+            "column lineup",
+            "out of frame",
+            "fake scrollbar",
+            "feet out of frame / foot out of frame",
+            "head out of frame",
+            "knees out of frame",
+            "out-of-frame censoring",
+            "outside border",
+            "from outside",
+            "glitch",
+            "isometric",
+            "letterboxed",
+            "pillarboxed",
+            "lineup",
+            "mosaic art",
+            "photomosaic",
+            "negative space",
+            "omake",
+            "partially underwater shot",
+            "POV",
+            "social media composition",
+            "symmetry",
+            "polar opposites",
+            "rotational symmetry",
+            "tachi-e",
+            "trim marks",
+            "zoom layer",
+            "projected inset"
+        ],
+        format: [
+            "3D",
+            "animated",
+            "animated PNG",
+            "Flash",
+            "video",
+            "music video",
+            "animated GIF",
+            "EasyToon",
+            "FlipaClip",
+            "non-repeating animation",
+            "looping animation",
+            "roulette animation",
+            "Live2D",
+            "anime screenshot",
+            "archived file",
+            "artbook",
+            "calendar",
+            "card",
+            "comic",
+            "1koma",
+            "2koma",
+            "3koma",
+            "4koma",
+            "multiple 4koma",
+            "5koma",
+            "borderless panels",
+            "manga",
+            "left-to-right manga",
+            "right-to-left comic",
+            "silent comic",
+            "corrupted file",
+            "corrupted Twitter file",
+            "cover",
+            "album cover",
+            "character single",
+            "cover page",
+            "doujin cover",
+            "DVD cover",
+            "fake cover",
+            "video game cover",
+            "magazine cover",
+            "manga cover",
+            "fake screenshot",
+            "fake phone screenshot",
+            "game CG",
+            "game screenshot",
+            "gyotaku (medium)",
+            "highres",
+            "absurdres",
+            "incredibly absurdres",
+            "lowres",
+            "icon",
+            "logo",
+            "kirigami",
+            "lineart",
+            "no lineart",
+            "outline",
+            "tall image",
+            "wide image",
+            "mosaic art",
+            "photomosaic",
+            "oekaki",
+            "official art",
+            "phonecard",
+            "photo",
+            "papercraft",
+            "paper child",
+            "paper cutout",
+            "pixel art",
+            "postcard",
+            "poster",
+            "revision",
+            "has bad revision",
+            "has adversarial noise revision",
+            "has artifacted revision",
+            "has censored revision",
+            "has cropped revision",
+            "has downscaled revision",
+            "has lossy revision",
+            "has watermarked revision",
+            "scan",
+            "shitajiki",
+            "tegaki",
+            "transparent background",
+            "triptych",
+            "Thumbnail collage",
+            "vector trace",
+            "wallpaper",
+            "tileable",
+            "wallpaper forced",
+            "widescreen",
+            "official wallpaper"
+        ],
+        subject_matter: [
+            "AI-generated",
+            "cityscape",
+            "everyone",
+            "absolutely everyone",
+            "group picture",
+            "iei",
+            "landscape",
+            "nature",
+            "no humans",
+            "off-topic",
+            "scenery",
+            "still life", 
+            "animal focus",
+            "armpit focus",
+            "ass focus",
+            "back focus",
+            "book focus",
+            "breast focus",
+            "cloud focus",
+            "eye focus",
+            "food focus",
+            "foot focus",
+            "hand focus",
+            "hip focus",
+            "male focus",
+            "monster focus",
+            "navel focus",
+            "object focus",
+            "other focus",
+            "plant focus",
+            "pectoral focus",
+            "penis focus",
+            "solo focus",
+            "vehicle focus",
+            "text focus",
+            "thigh focus",
+            "weapon focus",
+            "vehicle focus",
+            "wind chime focus"
+        ],
+        body_framing: [
+            "portrait ",
+            "upper body ",
+            "lower body ",
+            "cowboy shot ",
+            "feet out of frame ",
+            "full body ",
+            "wide shot ",
+            "very wide shot ",
+            "close-up",
+            "cut-in",
+            "split crop ",
+            "cropped legs",
+            "cropped torso",
+            "cropped arms",
+            "cropped shoulders",
+            "cropped head",
+            "multiple views",
+            "profile",
+            "group profile"
+        ],
+        styles: [
+            "abstract",
+            "art deco",
+            "art nouveau",
+            "fake photograph",
+            "fine art parody",
+            "flame painter",
+            "impressionism",
+            "ligne claire",
+            "nihonga",
+            "sumi-e",
+            "ukiyo-e",
+            "minimalism",
+            "realistic",
+            "photorealistic",
+            "sketch",
+            "style parody",
+            "List of Style Parodies",
+            "surreal",
+            "traditional media", 
+            "faux traditional media",
+            "unfinished"
+        ],
+        techniques: [
+            "blending",
+            "bloom",
+            "bokeh",
+            "caustics",
+            "cel shading",
+            "chiaroscuro",
+            "chromatic aberration",
+            "chromatic aberration abuse",
+            "diffraction spikes",
+            "depth of field",
+            "distortion",
+            "dithering",
+            "double exposure",
+            "drop shadow",
+            "emphasis lines",
+            "film grain",
+            "foreshortening",
+            "glitch",
+            "gradient",
+            "halftone",
+            "high contrast",
+            "JPEG artifacts on purpose",
+            "lens flare",
+            "lens flare abuse",
+            "Tag Group:Lighting",
+            "backlighting",
+            "sidelighting",
+            "underlighting",
+            "motion blur",
+            "motion lines",
+            "multiple monochrome",
+            "optical illusion",
+            "anaglyph",
+            "EXIF thumbnail surprise",
+            "open in Internet Explorer",
+            "open in Winamp",
+            "stereogram",
+            "overexposure",
+            "scanlines",
+            "silhouette",
+            "speed lines",
+            "thumbnail surprise",
+            "EXIF thumbnail surprise",
+            "vignetting"
+        ],
+        flaws: [
+            "Artifacts",
+            "GIF artifacts",
+            "JPEG artifacts",
+            "adversarial noise",
+            "aliasing",
+            "scan artifacts",
+            "bleed through",
+            "crease",
+            "VHS artifacts",
+            "bad aspect ratio",
+            "blurry",
+            "censored / uncensored",
+            "decensored",
+            "Tag Group:Censorship",
+            "derivative work",
+            "photo-referenced",
+            "reference photo",
+            "reference work",
+            "screenshot redraw",
+            "duplicate",
+            "pixel-perfect duplicate",
+            "artistic error",
+            "bad reflection",
+            "extra digits",
+            "typo",
+            "lossless-lossy",
+            "lossy-lossless",
+            "image macro",
+            "MD5 mismatch",
+            "missing thumbnail",
+            "moire",
+            "third-party edit",
+            "detexted",
+            "hard-translated",
+            "nude filter",
+            "poorly drawn",
+            "anatomical nonsense",
+            "bad anatomy",
+            "bad feet",
+            "bad hands",
+            "bad proportions",
+            "quality",
+            "ranguage",
+            "resized",
+            "downscaled",
+            "image sample",
+            "upscaled",
+            "Waifu2x",
+            "reversed",
+            "rotated",
+            "solid color thumbnail",
+            "unmoving pattern",
+            "watermark",
+            "third-party watermark",
+            "web address",
+            "extraction"
+        ],
+        backgrounds: [
+            "aqua background",
+            "black background",
+            "blue background",
+            "brown background",
+            "green background",
+            "grey background",
+            "orange background",
+            "pink background",
+            "purple background",
+            "red background",
+            "white background",
+            "yellow background",
+            "gradient background",
+            "greyscale with colored background",
+            "monochrome background",
+            "multicolored background",
+            "rainbow background",
+            "heaven condition",
+            "two-tone background",
+            "argyle background",
+            "checkered background",
+            "cross background",
+            "dotted background",
+            "food-themed background",
+            "grid background",
+            "halftone background",
+            "honeycomb background",
+            "marble background",
+            "paw print background",
+            "plaid background",
+            "polka dot background",
+            "simple background",
+            "snowflake background",
+            "spiral background",
+            "strawberry background",
+            "striped background",
+            "sunburst background",
+            "AI-generated background",
+            "abstract background",
+            "animal background",
+            "text background",
+            "backlighting",
+            "blending",
+            "blurry background",
+            "card background",
+            "chibi inset",
+            "drama layer",
+            "fiery background",
+            "flag background",
+            "floral background",
+            "fruit background",
+            "game screenshot background",
+            "heart background",
+            "imageboard colors",
+            "lace background",
+            "mosaic background",
+            "paneled background",
+            "photo background",
+            "projected inset",
+            "Sofmap background",
+            "sparkle background",
+            "starry background",
+            "transparent background",
+            "zoom layer"
+        ],
+        background_colors: [
+        "aqua theme",
+        "black theme",
+        "blue theme",
+        "brown theme",
+        "green theme",
+        "grey theme",
+        "orange theme",
+        "pink theme",
+        "purple theme",
+        "red theme",
+        "white theme",
+        "yellow theme",
+        "monochrome ",
+        "dark ",
+        "muted color ",
+        "pale color ",
+        "partially colored ",
+        "greyscale with colored background ",
+        "spot color ",
+        "monochrome + greyscale ",
+        "high contrast ",
+        "lineart ",
+        "negative ",
+        "sepia ",
+        "high contrast ",
+        "limited palette ",
+        "pastel colors ",
+        "double exposure ",
+        "vignetting ",
+        "inverted colors ",
+        "neon palette / saturated ",
+        "colorful ",
+        "analogous colors ",
+        "color contrast ",
+        "color coordination "
+        ],
+        focus: [
+          "armpit focus",
+          "ass focus",
+          "back focus",
+          "breast focus",
+          "eye focus",
+          "foot focus",
+          "hand focus",
+          "hip focus",
+          "navel focus",
+          "pectoral focus",
+          "thigh focus",
+          "male focus",
+          "other focus",
+          "animal focus",
+          "book focus",
+          "cloud focus",
+          "food focus",
+          "text focus",
+          "vehicle focus",
+          "weapon focus",
+          "wind chime focus",
+          "solo focus",
+          "text focus",
+          "soft focus"
+        ],
+        lighting: [
+            "backlighting",
+            "sidelighting",
+            "underlighting",
+            "bloom",
+            "sunlight",
+            "sunbeam",
+            "dappled sunlight",
+            "moonlight",
+            "spotlight",
+            "stage lights",
+            "caustics",
+            "underwater light",
+            "crack of light",
+            "refraction",
+            "light rays",
+            "dim lighting",
+            "morning",
+            "dawn",
+            "twilight",
+            "sunrise",
+            "day",
+            "evening",
+            "sunset",
+            "twilight",
+            "dusk",
+            "night",
+            "sun",
+            "moon",
+            "glowstick",
+            "lamp",
+            "desk lamp",
+            "lamppost",
+            "wall lamp",
+            "torch",
+            "fire",
+            "embers",
+            "flashlight",
+            "lantern",
+            "oil lamp",
+            "wooden lantern",
+            "ceiling light ",
+            "chandelier ",
+            "candlelight ",
+            "muzzle flash ",
+            "headlight ",
+            "floodlights",
+            "flare ",
+            "ultraviolet light ",
+            "glowing headgear ",
+            "shade",
+            "tree shade",
+            "shadow",
+            "colored shadow",
+            "window shadow",
+            "dark",
+            "darkness "
+        ],
+        prints: [
+            "Argyle",
+            "Asa No Ha",
+            "Camouflage",
+            "Checkered",
+            "Honeycomb",
+            "Houndstooth",
+            "Pinstripe pattern",
+            "Plaid",
+            "Gingham",
+            "Polka dot",
+            "Sayagata",
+            "Seigaiha",
+            "Striped",
+            "Diagonal stripes",
+            "Horizontal Stripes",
+            "Vertical stripes",
+            "Colored stripes",
+            "Multicolored stripes",
+            "Tiger stripes",
+            "Double vertical stripe",
+            "Invasion stripes", 
+            "Yagasuri",
+            "Animal print",
+            "Bat print",
+            "Bear print",
+            "Bird print",
+            "Cow print",
+            "Leopard print",
+            "Tiger print",
+            "Snake print",
+            "Zebra print",
+            "Fireworks print",
+            "Flag print",
+            "Floral print",
+            "Cherry blossom print",
+            "Game controller print",
+            "Moon print",
+            "Crescent print",
+            "Handprint",
+            "Leaf print",
+            "Musical note print",
+            "Piano print",
+            "Watermelon print",
+            "patterned hair",
+            "patterned clothing",
+            "patterned (for unique patterns with no name)",
+            "patterned background",
+            "Print eyepatch",
+            "Print footwear",
+            "Print gloves",
+            "Print hakama",
+            "Print headwear",
+            "Print kimono",
+            "Print leggings",
+            "Print neckwear",
+            "Print panties",
+            "Print pantyhose",
+            "Print shirt",
+            "Print shorts",
+            "Print socks",
+            "Print swimsuit",
+            "Print bikini",
+            "Print thighhighs",
+            "Print umbrella"
+        ], 
+    },
+    patterns: {
+        traditional_japanese_patterns: [
+            "asa no ha (pattern)",
+            "egasumi",
+            "genjiguruma",
+            "goshoguruma",
+            "igeta (pattern)",
+            "kagome (pattern)",
+            "kanoko (pattern)",
+            "karakusa (pattern)",
+            "kikumon",
+            "kikkoumon",
+            "kojitsunagi (pattern)",
+            "matsu symbol",
+            "sakuramon",
+            "sayagata",
+            "seigaiha",
+            "shima (pattern)",
+            "shippou (pattern)",
+            "uchiwa",
+            "uroko (pattern)",
+            "yagasuri"
+        ],
+        other_patterns: [
+            "animal print",
+            "cow print",
+            "leopard print",
+            "tiger print",
+            "zebra print",
+            "shark print",
+            "argyle",
+            "checkered",
+            "cross print",
+            "double happiness",
+            "fleur-de-lis",
+            "floral print",
+            "flower of life",
+            "gingham",
+            "houndstooth",
+            "meandros",
+            "paisley",
+            "plaid",
+            "polka dot",
+            "striped",
+            "xiangyun (whorled clouds)", 
+        ],
+    },
+  }
+    </script>
+</body>
+</html>
