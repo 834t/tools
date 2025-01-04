@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Trimmer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+      }
+      #video-container {
+        max-width: 100%;
+        margin-bottom: 20px;
+      }
+      video {
+        max-width: 512px;
+        border: 1px solid #ccc;
+        margin-bottom: 10px;
+      }
+      input[type='range'] {
+        width: 100%;
+      }
+      button {
+        padding: 10px 15px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      .time-display {
+        font-size: 16px;
+        width: 45%;
+      }
+      canvas {
+        max-width: 512px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Video Trimmer</h1>
+    <p>Insert video URL and trim it to a desired section.</p>
+
+    <!-- Input field for video URL -->
+    <input
+      type="text"
+      id="video-url"
+      placeholder="Enter video URL here"
+      style="width: 100%; padding: 10px; margin-bottom: 20px"
+      value="https://static.vecteezy.com/system/resources/previews/023/959/561/mp4/timecode-digital-software-hour-minute-second-duration-close-up-video.mp4"
+    />
+    <br />
+    <button id="load-video">Load Video</button>
+
+    <div id="video-container">
+      <video id="video-player" crossorigin="anonymous" controls></video>
+      <canvas id="recorder_canvas"></canvas>
+    </div>
+
+    <!-- Inputs for time range -->
+    <div class="time-display">
+      <label for="start-time">Start Time:</label>
+      <input type="range" id="start-time" min="0" value="0" />
+      <span id="start-time-value">0:00</span>
+    </div>
+
+    <div class="time-display">
+      <label for="end-time">End Time:</label>
+      <input type="range" id="end-time" min="0" value="0" />
+      <span id="end-time-value">0:00</span>
+    </div>
+    <button id="process-video">Trim and Download Video</button>
+
+    <script>
+      let videoElement = document.getElementById('video-player');
+      let startTimeInput = document.getElementById('start-time');
+      let endTimeInput = document.getElementById('end-time');
+      let startTimeValue = document.getElementById('start-time-value');
+      let endTimeValue = document.getElementById('end-time-value');
+      let loadButton = document.getElementById('load-video');
+      let processButton = document.getElementById('process-video');
+      let videoURLInput = document.getElementById('video-url');
+      let canvas = document.getElementById('recorder_canvas');
+
+      let mediaRecorder;
+      let isRecording = false;
+      let lastDrawTime = 0;
+
+      // Function to convert seconds to minutes:seconds format
+      function formatTime(seconds) {
+        let mins = Math.floor(seconds / 60);
+        let secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      }
+
+      // Load video and set ranges
+      loadButton.addEventListener('click', () => {
+        const videoUrl = videoURLInput.value;
+        if (!videoUrl) {
+          alert('Please enter a video URL.');
+          return;
+        }
+
+        // Load the video
+        videoElement.src = videoUrl;
+        videoElement.load();
+        videoElement.onloadedmetadata = function () {
+          const duration = videoElement.duration;
+          endTimeInput.max = duration;
+          endTimeInput.value = duration;
+          endTimeValue.textContent = formatTime(duration);
+
+          // Set initial end time
+          startTimeInput.max = duration;
+          startTimeInput.value = 0;
+          startTimeValue.textContent = formatTime(0);
+        };
+      });
+
+      // Update time labels as range sliders move
+      startTimeInput.addEventListener('input', () => {
+        startTimeValue.textContent = formatTime(startTimeInput.value);
+      });
+
+      endTimeInput.addEventListener('input', () => {
+        endTimeValue.textContent = formatTime(endTimeInput.value);
+      });
+
+      // Function for video trimming and recording
+      processButton.addEventListener('click', () => {
+        const startTime = parseFloat(startTimeInput.value);
+        const endTime = parseFloat(endTimeInput.value);
+        const videoUrl = videoURLInput.value;
+
+        if (!videoUrl) {
+          alert('Please enter a video URL.');
+          return;
+        }
+
+        if (endTime <= startTime) {
+          alert('End time must be greater than start time.');
+          return;
+        }
+        let recordedChunks = [];
+        let frames = [];
+
+        // Set video current time to start
+        videoElement.currentTime = startTime;
+        // Create a canvas for capturing frames
+        let ctx = canvas.getContext('2d');
+
+        // Create a stream from the canvas to record video
+        let stream = canvas.captureStream(30); // Capture 30 fps
+
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'video/webm;codecs=vp8',
+        });
+
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+
+        console.log({
+          stream: mediaRecorder.stream,
+        });
+        // On data available, push the chunks to recordedChunks
+        mediaRecorder.ondataavailable = function (event) {
+          console.log({
+            event,
+          });
+          recordedChunks.push(event.data);
+        };
+
+        // When the recording stops, create the download link
+        mediaRecorder.onstop = function () {};
+
+        // Start recording
+        isRecording = true;
+
+        const stopAndSaveRecorderChunk = () => {
+          isRecording = false;
+          mediaRecorder.stop();
+          videoElement.pause();
+          setTimeout(() => {
+            console.log({
+              recordedChunks,
+              frames,
+            });
+            let blob = new Blob(recordedChunks, { type: 'video/mp4' });
+            let videoURL = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = videoURL;
+            a.download = 'trimmed_video.webm';
+            a.click();
+          }, 1000);
+        };
+
+        videoElement.play();
+        mediaRecorder.start();
+        // Listen for the video time updates and draw frames
+        function drawFrame() {
+          if (!isRecording) return;
+
+          // Draw the current frame from the video to canvas
+          ctx.drawImage(videoElement, 0, 0);
+          // If current time is greater than end time, stop the process
+          if (videoElement.currentTime >= endTime) {
+            stopAndSaveRecorderChunk();
+            return;
+          }
+          
+          // Request the next frame to be drawn
+          requestAnimationFrame(drawFrame);
+        }
+        
+        // Start drawing frames
+        drawFrame();
+      });
+    </script>
+  </body>
+</html>
