@@ -1,28 +1,46 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Video Trimmer</title>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 20px;
+      body { 
+        margin: 0; 
+
+        font-family: monospace;
+        width: 100%;
+        height: 100%;
+        margin: 0; 
+        background: #0d0d0d;
+        color: #eee;
+      }
+            
+      .main-container{ 
+        margin: 0 50%;
+        transform: translate( -50%, 0 );
+        width: 800px;
+        padding: 5px;
+        background-color: rgba(50, 50, 50, 0.8);
       }
       #video-container {
         max-width: 100%;
         margin-bottom: 20px;
       }
+      .viodeo-holder{
+        position: relative;
+        max-width: 800px;
+        width: fit-content;
+        display: inline-flex;
+      }
       video {
-        max-width: 512px;
+        max-width: 100%;
         border: 1px solid #ccc;
         margin-bottom: 10px;
       }
-      input[type='range'] {
-        width: 100%;
-      }
       button {
+        height: 30px;
+        border-radius: 3px;
         padding: 10px 15px;
         background-color: #4caf50;
         color: white;
@@ -37,69 +55,430 @@
         width: 45%;
       }
       canvas {
-        max-width: 512px;
+        display: none;
+        max-width: 256px;
+        margin-bottom: 10px;
       }
+      #video-url {
+        width: 790px;
+        padding: 5px; 
+        margin-bottom: 5px;
+      }
+      #videoDropZone{
+        width: 800px;
+        height: 30px;
+        border-radius: 3px;
+        border: 1px solid #999999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+      }
+      input[type='range'] {
+        width: 800px;
+      }
+
+      .record-ring{
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        top: 15px;
+        right: 15px;
+        border: 4px solid red;
+        border-radius: 50%;
+        display: none; /* or flex */
+        justify-content: center;
+        align-items: center;
+        z-index: 5;
+      }
+
+      .record-ring .dot {
+          width: 16px;
+          height: 16px;
+          background-color: red;
+          border-radius: 50%;
+          animation: fadeInOut 1s infinite;
+      }
+
+      @keyframes fadeInOut {
+          0% {
+              opacity: 1;
+          }
+          80% {
+              opacity: 0;
+          }
+          100% {
+              opacity: 1;
+          }
+      }
+                    
+
+      .range-slider {
+        position: relative;
+        width: calc( 100% - 40px );
+        height: 10px;
+        background: #ddd;
+        margin: 10px 20px;
+      }
+
+      .range-track {
+        position: absolute;
+        background: #007bff;
+        height: 10px;
+        z-index: 1;
+      }
+
+
+      .range-track-processed {
+        position: absolute;
+        height: 4px;
+        top: 3px;
+        background: #ff008c;
+        z-index: 2;
+      }
+
+      .range-thumb {
+        position: absolute;
+        width: 2px;
+        height: 16px;
+        border-radius: 3px;
+        background: #fff;
+        border: 2px solid #007bff; 
+        cursor: pointer;
+        z-index: 5;
+        transform: translate(-50%, -4px);
+      }
+      .range-thumb.draged, .range-thumb:hover {
+        width: 6px;
+      }
+      
+      .range-thumb.thumb-min .thumb_display,
+      .range-thumb.thumb-max .thumb_display{
+        font-size: 8px;
+        top: -10px;
+        position: absolute;
+      }
+      .range-thumb.thumb-min .thumb_display{
+        left: 0px;
+        transform: translate(-100%, 0);
+      }
+      .range-thumb.thumb-max .thumb_display{
+        right: 0px;
+        transform: translate(100%, 0);
+      }
+ 
     </style>
   </head>
   <body>
-    <h1>Video Trimmer</h1>
-    <p>Insert video URL and trim it to a desired section.</p>
 
-    <!-- Input field for video URL -->
-    <input
-      type="text"
-      id="video-url"
-      placeholder="Enter video URL here"
-      style="width: 100%; padding: 10px; margin-bottom: 20px"
-      value="https://static.vecteezy.com/system/resources/previews/023/959/561/mp4/timecode-digital-software-hour-minute-second-duration-close-up-video.mp4"
-    />
-    <br />
-    <button id="load-video">Load Video</button>
 
-    <div id="video-container">
-      <video id="video-player" crossorigin="anonymous" controls></video>
-      <canvas id="recorder_canvas"></canvas>
+    <div class="main-container">
+      <h3>Video Trimmer</h3>
+      <p>Insert video URL and trim it to a desired section.</p>
+  
+      <!-- Input field for video URL -->
+      <input
+        type="text"
+        id="video-url"
+        placeholder="Enter video URL here"
+        value="https://static.vecteezy.com/system/resources/previews/023/959/561/mp4/timecode-digital-software-hour-minute-second-duration-close-up-video.mp4"
+      />
+      <div id="videoDropZone">
+          Drop video here
+      </div>
+      <br />
+  
+      <button id="load-video">Load Video</button> |
+      <button id="process-video">Trim and Download Video</button>
+  
+      <div id="video-container">
+        <div class="viodeo-holder" >
+          <video id="video-player" crossorigin="anonymous" controls></video>
+          <div class="record-ring" >
+            <div class="dot"></div>
+          </div>
+        </div>
+        <canvas id="recorder_canvas"></canvas>
+      </div>
+  
+      <small style="font-size: 8px;">use alt key for precise control</small>
+      <div style="display: none;" >
+        <span id="start-time-value">0:00</span> | 
+        <span id="end-time-value">0:00</span>
+      </div>
+      <div style="width: 800px;">
+        <div id="slider_container1"></div> 
+      </div>
     </div>
-
     <!-- Inputs for time range -->
-    <div class="time-display">
-      <label for="start-time">Start Time:</label>
-      <input type="range" id="start-time" min="0" value="0" />
-      <span id="start-time-value">0:00</span>
-    </div>
+    <!-- <div class="time-display"> 
+      <span id="start-time-value">0:00</span> | <span id="end-time-value">0:00</span>
+    </div> -->
 
-    <div class="time-display">
-      <label for="end-time">End Time:</label>
-      <input type="range" id="end-time" min="0" value="0" />
-      <span id="end-time-value">0:00</span>
-    </div>
-    <button id="process-video">Trim and Download Video</button>
+
 
     <script>
+ 
+      class DualHandleSlider {
+
+        constructor( containerID, hooks = {} ){
+          this.hooks = hooks;
+          this.container = document.getElementById(containerID);
+          this.container.innerHTML = this.hooks.template || `
+            <div class="range-slider">
+              <div class="range-track"></div>
+              <div class="range-track-processed" style="display:none;"></div>
+              <div class="range-thumb thumb-min"> <span class="thumb_display"></span></div>
+              <div class="range-thumb thumb-max"> <span class="thumb_display"></span></div>
+            </div> 
+          `;
+          this.slider = this.container.querySelector('.range-slider');
+          this.track = this.container.querySelector('.range-track');
+          this.track_processed = this.container.querySelector('.range-track-processed');
+          this.thumbMin = this.container.querySelector('.thumb-min');
+          this.thumbMax = this.container.querySelector('.thumb-max'); 
+          this.minMax = {
+              min: 0,
+              max: 100,
+              step: 1,
+              currentMin: 0,
+              currentMax: 100,
+          };
+          this.isDraggingMin = false;
+          this.isDraggingMax = false;
+          this.onDrag = this.onDrag.bind( this );
+          this.stopDragging = this.stopDragging.bind( this );
+          this.init();
+        }
+
+        resetMinMax(){
+          this.minMax = {
+              min: 0,
+              max: 100,
+              step: 1,
+              currentMin: 0,
+              currentMax: 100,
+          };
+          this.thumbMinSet('');
+          this.thumbMaxSet('');
+          this.updatePositions();
+        }
+
+        thumbMinSet( val ){
+          const displaySpan = this.thumbMin.querySelector('.thumb_display');
+          displaySpan.innerHTML = val;
+        }
+
+        thumbMaxSet( val ){
+          const displaySpan = this.thumbMax.querySelector('.thumb_display');
+          displaySpan.innerHTML = val;
+        }
+
+        updateSliderRectangle(){
+          this.sliderRect = this.slider.getBoundingClientRect();
+        }
+
+        updatePositions(){
+          const { 
+            minMax,
+            thumbMin,
+            thumbMax,
+            track,
+            track_processed
+          } = this;
+          if(this.hooks.onChange) this.hooks.onChange( { 
+            minMax: JSON.parse( JSON.stringify( this.minMax ) ),
+            isDraggingMin: this.isDraggingMin,
+            isDraggingMax: this.isDraggingMax,
+          }, this );
+          const minPercent = ((minMax.currentMin - minMax.min) / (minMax.max - minMax.min)) * 100;
+          const maxPercent = ((minMax.currentMax - minMax.min) / (minMax.max - minMax.min)) * 100;
+          thumbMin.style.left = `${minPercent}%`;
+          thumbMax.style.left = `${maxPercent}%`;
+          track.style.left = `${minPercent}%`;
+          track.style.width = `${maxPercent - minPercent}%`; 
+          track_processed.style.left = `${minPercent}%`;
+        }
+
+        startDragging(event, thumb) {
+          event.preventDefault();
+          const { minMax, thumbMin, thumbMax, slider } = this;
+          if (thumb === 'min') {
+            this.isDraggingMin = true; 
+            thumbMin.classList.add('draged');
+          }
+          if (thumb === 'max') {
+            this.isDraggingMax = true; 
+            thumbMax.classList.add('draged');
+          }
+          this.updateSliderRectangle();
+          document.addEventListener('mousemove', this.onDrag );
+          document.addEventListener('mouseup', this.stopDragging );
+        }
+
+        showProcessed(){
+          this.track_processed.style.display = 'block';
+        }
+
+        hideProcessed(){
+          this.track_processed.style.display = 'none';
+        }
+
+        setRangeProcessed( processedPositionPercent ){
+          const { minMax, track_processed } = this;
+          const minPercent = ((minMax.currentMin - minMax.min) / (minMax.max - minMax.min)) * 100;
+          track_processed.style.width = `${processedPositionPercent - minPercent}%`; 
+        }
+
+        onDrag(event) {
+          const { minMax, thumbMin, thumbMax, slider, sliderRect } = this;
+          let value;
+          const sliderWidthToPercent = ( 100 / sliderRect.width );
+          if( !event.altKey ){
+            const sliderWidth = sliderRect.width;
+            let offsetX = event.clientX - sliderRect.left;
+            const percent = Math.min( Math.max(offsetX / sliderWidth, 0), 1 );
+            value = parseFloat( (minMax.min + percent * (minMax.max - minMax.min)).toFixed(2) );
+          } else {
+            const movementX = event.movementX * sliderWidthToPercent / 10;
+            let percent = 0;
+            if ( this.isDraggingMin ) percent = minMax.currentMin + movementX;
+            if ( this.isDraggingMax ) percent = minMax.currentMax + movementX;  
+            percent = percent / 100;
+            value = parseFloat( ( minMax.min + percent * (minMax.max - minMax.min)).toFixed(2) );
+          }
+          if ( this.isDraggingMin && value < minMax.currentMax) minMax.currentMin = Math.max(value, minMax.min);
+          if ( this.isDraggingMax && value > minMax.currentMin) minMax.currentMax = Math.min(value, minMax.max);
+          this.updatePositions();
+        } 
+
+        stopDragging() {
+          const { minMax, thumbMin, thumbMax, slider, sliderRect } = this;
+          this.isDraggingMin = false;
+          this.isDraggingMax = false;
+          thumbMin.classList.remove('draged');
+          thumbMax.classList.remove('draged');
+          document.removeEventListener('mousemove', this.onDrag);
+          document.removeEventListener('mouseup', this.stopDragging);
+        }
+
+        init(){
+          const { minMax, thumbMin, thumbMax, slider, sliderRect } = this;
+          thumbMin.addEventListener('mousedown', (event) => {
+            this.startDragging(event, 'min');
+          });
+          thumbMax.addEventListener('mousedown', (event) => {
+            this.startDragging(event, 'max')
+          });
+          this.updateSliderRectangle();
+          this.updatePositions();
+        }
+
+      }
+
+
       let videoElement = document.getElementById('video-player');
-      let startTimeInput = document.getElementById('start-time');
-      let endTimeInput = document.getElementById('end-time');
+ 
       let startTimeValue = document.getElementById('start-time-value');
       let endTimeValue = document.getElementById('end-time-value');
+
       let loadButton = document.getElementById('load-video');
       let processButton = document.getElementById('process-video');
       let videoURLInput = document.getElementById('video-url');
-      let canvas = document.getElementById('recorder_canvas');
+      // let canvas = document.getElementById('recorder_canvas');
 
       let mediaRecorder;
       let isRecording = false;
       let lastDrawTime = 0;
+      let dropzonSrc = null;
+      let DURATION = 0;
+
+      let TIME_START = 0;
+      let TIME_END = 0;
+
+      function setupVideoHandler(elementId, onVideoLoaded) {
+        const element = document.getElementById(elementId);
+
+        if (!element) {
+            console.error(`Element with ID "${elementId}" not found.`);
+            return;
+        }
+ 
+        function handleVideoFile(file) {
+            if (!file || file.type.indexOf('video') !== 0) {
+                console.error('Provided file is not a video.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const dataUrl = e.target.result;
+                if (typeof onVideoLoaded === 'function') {
+                    onVideoLoaded(dataUrl);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+ 
+        element.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'video/*';
+            input.style.display = 'none';
+            
+            input.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) handleVideoFile(file);
+            });
+ 
+            document.body.appendChild(input);
+            input.click();
+            document.body.removeChild(input);
+        });
+ 
+        element.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+
+        element.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+            if (file) handleVideoFile(file);
+        });
+      }
+
+      setupVideoHandler('videoDropZone', (dataUrl) => { 
+            dropzonSrc = dataUrl; 
+      });
 
       // Function to convert seconds to minutes:seconds format
       function formatTime(seconds) {
         let mins = Math.floor(seconds / 60);
-        let secs = Math.floor(seconds % 60);
-        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        let secs = parseFloat( ( seconds % 60 ).toFixed(2) );
+        return `${mins < 10 ? '0' + mins : mins }:${secs < 10 ? '0' : ''}${secs}`;
       }
 
+      const DualSliderController = new DualHandleSlider( 'slider_container1', {
+        onChange: ( data, controller ) => { 
+          const { minMax } = data; 
+          TIME_START = minMax.currentMin * DURATION / 100;
+          TIME_END = minMax.currentMax * DURATION / 100;
+          if( data.isDraggingMax ){
+            videoElement.currentTime = TIME_END;
+          } else {
+            videoElement.currentTime = TIME_START;
+          }
+          startTimeValue.textContent = formatTime( TIME_START  );
+          endTimeValue.textContent = formatTime( TIME_END );
+          controller.thumbMaxSet( endTimeValue.textContent );
+          controller.thumbMinSet( startTimeValue.textContent );
+        }
+      } );
+      
       // Load video and set ranges
       loadButton.addEventListener('click', () => {
-        const videoUrl = videoURLInput.value;
+        const videoUrl = dropzonSrc || videoURLInput.value;
         if (!videoUrl) {
           alert('Please enter a video URL.');
           return;
@@ -110,32 +489,30 @@
         videoElement.load();
         videoElement.onloadedmetadata = function () {
           const duration = videoElement.duration;
-          endTimeInput.max = duration;
-          endTimeInput.value = duration;
+          DURATION = duration; 
           endTimeValue.textContent = formatTime(duration);
-
-          // Set initial end time
-          startTimeInput.max = duration;
-          startTimeInput.value = 0;
           startTimeValue.textContent = formatTime(0);
+          
+          DualSliderController.resetMinMax();
+          DualSliderController.thumbMaxSet( endTimeValue.textContent );
+          DualSliderController.thumbMinSet( startTimeValue.textContent );
+          DualSliderController.setRangeProcessed( videoElement.currentTime / DURATION * 100 );
+
         };
-      });
-
-      // Update time labels as range sliders move
-      startTimeInput.addEventListener('input', () => {
-        startTimeValue.textContent = formatTime(startTimeInput.value);
-      });
-
-      endTimeInput.addEventListener('input', () => {
-        endTimeValue.textContent = formatTime(endTimeInput.value);
       });
 
       // Function for video trimming and recording
       processButton.addEventListener('click', () => {
-        const startTime = parseFloat(startTimeInput.value);
-        const endTime = parseFloat(endTimeInput.value);
+        const startTime = parseFloat( TIME_START );
+        const endTime = parseFloat( TIME_END );
         const videoUrl = videoURLInput.value;
+        const recordRing = document.querySelector('.record-ring');
 
+        recordRing.style.display = 'flex';
+
+        DualSliderController.setRangeProcessed( TIME_START / DURATION * 100 );
+        DualSliderController.showProcessed();
+        
         if (!videoUrl) {
           alert('Please enter a video URL.');
           return;
@@ -151,26 +528,28 @@
         // Set video current time to start
         videoElement.currentTime = startTime;
         // Create a canvas for capturing frames
-        let ctx = canvas.getContext('2d');
+        // let ctx = canvas.getContext('2d');
 
         // Create a stream from the canvas to record video
-        let stream = canvas.captureStream(30); // Capture 30 fps
+        // let stream = canvas.captureStream(30); // Capture 30 fps
+ 
+        const videoData = videoElement.captureStream(30);
+ 
+        const combinedStream = new MediaStream([
+            ...videoData.getVideoTracks(),
+            ...videoData.getAudioTracks()
+        ]);
 
-        mediaRecorder = new MediaRecorder(stream, {
-          mimeType: 'video/webm;codecs=vp8',
+        mediaRecorder = new MediaRecorder( combinedStream, {
+          mimeType: 'video/webm;codecs=vp9,opus',
         });
 
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
-
-        console.log({
-          stream: mediaRecorder.stream,
-        });
+        // canvas.width = videoElement.videoWidth;
+        // canvas.height = videoElement.videoHeight;
+        // console.log({ stream: mediaRecorder.stream });
         // On data available, push the chunks to recordedChunks
         mediaRecorder.ondataavailable = function (event) {
-          console.log({
-            event,
-          });
+          console.log({ event });
           recordedChunks.push(event.data);
         };
 
@@ -184,6 +563,7 @@
           isRecording = false;
           mediaRecorder.stop();
           videoElement.pause();
+          recordRing.style.display = 'none';
           setTimeout(() => {
             console.log({
               recordedChunks,
@@ -205,20 +585,29 @@
           if (!isRecording) return;
 
           // Draw the current frame from the video to canvas
-          ctx.drawImage(videoElement, 0, 0);
+          // ctx.drawImage(videoElement, 0, 0);
           // If current time is greater than end time, stop the process
           if (videoElement.currentTime >= endTime) {
             stopAndSaveRecorderChunk();
+            DualSliderController.hideProcessed();
             return;
           }
-          
+
+          DualSliderController.setRangeProcessed( videoElement.currentTime / DURATION * 100 );
+ 
           // Request the next frame to be drawn
           requestAnimationFrame(drawFrame);
         }
-        
+
         // Start drawing frames
         drawFrame();
       });
     </script>
+
+
+    <script>
+
+    </script>
+
   </body>
 </html>
