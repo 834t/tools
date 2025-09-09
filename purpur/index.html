@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purpur Web Reference Board v2.6</title>
+    <!-- Load PixiJS from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.0/pixi.min.js" integrity="sha512-NVWPDocxwt9T3NhwBzx3c8vhg2WqGVgehZ100xOySkvbfdhqQDJbvzlSBWyFkFJEPwta89jdpldx2BlggNURVQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        /* Styles */
+        body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; background-color: #333; color: #eee; display: flex; flex-direction: column; height: 100vh; font-size: 13px; }
+        #canvas-container { flex-grow: 1; position: relative; overflow: hidden; cursor: grab; }
+        #pixi-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .controls { padding: 8px 12px; background-color: #444; border-bottom: 1px solid #555; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .controls-left, .controls-right { display: flex; gap: 8px; align-items: center; }
+        button, label { padding: 5px 10px; background-color: #5a5a5a; border: 1px solid #6a6a6a; color: #eee; border-radius: 3px; cursor: pointer; transition: background-color 0.2s; font-size: inherit; }
+        button:hover, label:hover { background-color: #6a6a6a; }
+        button:disabled { background-color: #4a4a4a; color: #888; cursor: not-allowed; border-color: #555;}
+        button.active { background-color: #77aaff; color: #111; border-color: #5588dd; }
+        input[type="file"] { display: none; }
+        .info { font-size: 0.9em; color: #bbb; }
+        .selection-border { position: absolute; border: 1px dashed #77aaff; pointer-events: none; box-sizing: border-box; display: none; z-index: 10; }
+        .separator { width: 1px; height: 18px; background-color: #6a6a6a; margin: 0 4px; }
+        #context-menu { position: absolute; display: none; background-color: #484848; border: 1px solid #6a6a6a; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); padding: 5px; z-index: 1000; min-width: 150px; }
+        #context-menu button { display: block; width: 100%; text-align: left; margin-bottom: 3px; background-color: #5a5a5a; border: none; }
+        #context-menu button:last-child { margin-bottom: 0; }
+        #context-menu button:hover { background-color: #6a6a6a; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="controls-left">
+            <span>Mode:</span>
+            <button id="mode-move" class="active">Move</button>
+            <button id="mode-scale">Scale</button>
+            <button id="mode-rotate">Rotate</button>
+            <span class="separator"></span>
+            <button id="layer-up" title="Bring Forward" disabled>↑</button>
+            <button id="layer-down" title="Send Backward" disabled>↓</button>
+        </div>
+        <div class="controls-right">
+             <span class="info">Click to select, Drag for action, Right-click on selected for options</span>
+            <button id="new-button">New Scene</button>
+            <button id="save-button">Save Scene</button>
+            <label for="load-input">Load Scene</label>
+            <input type="file" id="load-input" accept=".json">
+        </div>
+    </div>
+    <div id="canvas-container">
+        <div id="selection-box" class="selection-border"></div>
+        <!-- PixiJS adds canvas here -->
+    </div>
+
+    <!-- Hidden Context Menu -->
+    <div id="context-menu">
+        <button id="copy-original-btn">Copy Original Image</button>
+        <button id="delete-image-btn">Delete Original Image</button>
+        <hr>
+        <button id="copy-canvas-btn">Copy Canvas View</button>
+    </div>
+
+    <script>
+        // --- Global Variables & Settings ---
+        const canvasContainer = document.getElementById('canvas-container');
+        const selectionBoxDOM = document.getElementById('selection-box');
+        const contextMenuDOM = document.getElementById('context-menu'); 
+        contextMenuDOM.addEventListener('contextmenu', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        });
+        let app; let mainContainer;
+        let interactionMode = 'move'; let selectedSprite = null; let actionTarget = null;
+        let startDragPosition = { x: 0, y: 0 }; let startDragScale = { x: 1, y: 1 };
+        let startDragRotation = 0; let actionTargetOffset = { x: 0, y: 0 };
+        let isPanning = false; let lastPanPosition = { x: 0, y: 0 };
+        let layerUpButton; let layerDownButton;
+        let contextMenuTargetSprite = null;
+
+        // --- IndexedDB Settings & Functions ---
+        const DB_NAME = 'WebRefBoardDB'; const STORE_NAME = 'sceneState'; const AUTOSAVE_KEY = 'autosave';
+        let db; let autosaveInterval; const AUTOSAVE_DELAY = 5000;
+
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onerror = (event) => { console.error("IndexedDB error:", event.target.error); reject(event.target.error); };
+                request.onsuccess = (event) => { db = event.target.result; console.log("IndexedDB opened successfully."); resolve(db); };
+                request.onupgradeneeded = (event) => {
+                    const dbInstance = event.target.result;
+                    if (!dbInstance.objectStoreNames.contains(STORE_NAME)) {
+                        dbInstance.createObjectStore(STORE_NAME);
+                        console.log("IndexedDB object store created.");
+                    }
+                };
+            });
+        }
+
+        async function saveStateToDB(state) {
+            if (!db) { console.warn("IndexedDB not initialized for saving."); return; }
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = db.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const request = store.put(state, AUTOSAVE_KEY);
+                    request.onsuccess = () => resolve();
+                    request.onerror = (event) => { console.error("IndexedDB save error:", event.target.error); reject(event.target.error); };
+                } catch (error) {
+                    console.error("IndexedDB transaction exception:", error);
+                    reject(error);
+                }
+            });
+        }
+
+        async function loadStateFromDB() {
+            if (!db) { console.warn("IndexedDB not initialized for loading."); return null; }
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = db.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const request = store.get(AUTOSAVE_KEY);
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = (event) => { console.error("IndexedDB load error:", event.target.error); reject(event.target.error); };
+                } catch (error) {
+                    console.error("IndexedDB transaction exception:", error);
+                    reject(error);
+                }
+            });
+        }
+
+        // --- Scene State & Autosave Functions ---
+        function getCurrentSceneState() {
+            const sceneData = {
+                images: [],
+                container: {
+                    x: mainContainer.x,
+                    y: mainContainer.y,
+                    scaleX: mainContainer.scale.x,
+                    scaleY: mainContainer.scale.y,
+                }
+            };
+            mainContainer.children.forEach(sprite => {
+                if (sprite instanceof PIXI.Sprite && sprite.base64src) {
+                    sceneData.images.push({
+                        src: sprite.base64src,
+                        x: sprite.x,
+                        y: sprite.y,
+                        scaleX: sprite.scale.x,
+                        scaleY: sprite.scale.y,
+                        rotation: sprite.rotation,
+                    });
+                }
+            });
+            return sceneData;
+        }
+
+        function startAutosave() {
+            stopAutosave();
+            autosaveInterval = setInterval(async () => {
+                try {
+                    await saveStateToDB(getCurrentSceneState());
+                } catch(error) {
+                    console.error("Autosave failed:", error);
+                    stopAutosave();
+                }
+            }, AUTOSAVE_DELAY);
+            console.log("Autosave started.");
+        }
+
+        function stopAutosave() {
+            if (autosaveInterval) {
+                clearInterval(autosaveInterval);
+                autosaveInterval = null;
+                console.log("Autosave stopped.");
+            }
+        }
+
+        // --- Initialize PixiJS ---
+        async function initPixi() {
+            app = new PIXI.Application({
+                resizeTo: canvasContainer,
+                backgroundColor: 0x282828,
+                antialias: true,
+                resolution: window.devicePixelRatio || 1,
+                autoDensity: true,
+            });
+            canvasContainer.appendChild(app.view);
+            app.view.id = 'pixi-canvas';
+
+            app.stage.interactive = true;
+            app.stage.eventMode = 'static';
+            app.stage.hitArea = app.screen;
+
+            mainContainer = new PIXI.Container();
+            app.stage.addChild(mainContainer);
+
+            app.stage.on('pointermove', onGlobalPointerMove);
+            app.stage.on('pointerup', onGlobalPointerUp);
+            app.stage.on('pointerupoutside', onGlobalPointerUp);
+            app.stage.on('pointerdown', onStagePointerDown); // Handles background clicks
+
+            canvasContainer.addEventListener('wheel', onCanvasWheel, { passive: false });
+            canvasContainer.addEventListener('pointerdown', onCanvasPointerDown); // Handles panning start
+            window.addEventListener('pointermove', onWindowPointerMovePan);
+            window.addEventListener('pointerup', onWindowPointerUpPan);
+            canvasContainer.addEventListener('contextmenu', onCanvasContextMenu); // Handles background right-click
+
+            setupDragAndDrop();
+            setupControls(); // Includes context menu button setup
+            console.log("PixiJS initialized.");
+
+            // Add listener to close context menu on any click outside of it
+            window.addEventListener('pointerdown', (event) => {
+                if (contextMenuDOM.style.display === 'block' && !contextMenuDOM.contains(event.target)) {
+                    // hideContextMenu();
+                }
+            }, true); // Use capture phase
+
+            // DB Init and Restore
+            try {
+                await initDB();
+                const savedState = await loadStateFromDB();
+                if (savedState && savedState.images && savedState.images.length > 0) {
+                    if (confirm("Autosaved session found. Restore?")) {
+                        loadSceneData(savedState);
+                        console.log("Autosaved session restored.");
+                    } else {
+                        await saveStateToDB({});
+                        console.log("Autosave cleared.")
+                    }
+                }
+                startAutosave();
+            } catch (error) {
+                console.error("Error during DB init or restore:", error);
+            }
+        }
+
+        // --- Add Image Function ---
+        function addImageToScene(base64src, options = {}) {
+            try {
+                const texture = PIXI.Texture.from(base64src);
+                const sprite = new PIXI.Sprite(texture);
+                sprite.anchor.set(0.5);
+                sprite.x = options.x ?? (app.screen.width / 2 - mainContainer.x) / mainContainer.scale.x;
+                sprite.y = options.y ?? (app.screen.height / 2 - mainContainer.y) / mainContainer.scale.y;
+                sprite.scale.set(options.scaleX ?? 0.5, options.scaleY ?? 0.5);
+                sprite.rotation = options.rotation ?? 0;
+                sprite.interactive = true;
+                sprite.eventMode = 'static';
+                sprite.cursor = 'pointer';
+                sprite.base64src = base64src;
+
+                sprite.on('pointerdown', onSpritePointerDown);
+                // Listener specifically for the contextmenu event on the sprite
+                sprite.on('contextmenu', (event) => {
+                    onSpriteContextMenu( event ); 
+                });
+
+                mainContainer.addChild(sprite);
+                 if (options.x === undefined) { selectSprite(sprite); }
+            } catch (error) {
+                console.error("Error adding image:", error);
+                alert("Failed to load or process the image.");
+            }
+        }
+
+         // --- Selection Functions ---
+         function selectSprite(sprite) {
+             if (selectedSprite === sprite) return;
+             deselectSprite();
+             selectedSprite = sprite;
+             updateSelectionBox();
+             selectionBoxDOM.style.display = 'block';
+             updateLayerButtonsState();
+         }
+
+         function deselectSprite() {
+             if (selectedSprite) {
+                 hideContextMenu( true ); // Hide context menu on deselect
+                 selectedSprite = null;
+                 selectionBoxDOM.style.display = 'none';
+                 updateLayerButtonsState();
+             }
+         }
+
+         function updateSelectionBox() {
+             if (!selectedSprite) {
+                 selectionBoxDOM.style.display = 'none';
+                 return;
+             }
+             const bounds = selectedSprite.getBounds();
+             selectionBoxDOM.style.left = `${bounds.x}px`;
+             selectionBoxDOM.style.top = `${bounds.y}px`;
+             selectionBoxDOM.style.width = `${bounds.width}px`;
+             selectionBoxDOM.style.height = `${bounds.height}px`;
+             selectionBoxDOM.style.display = 'block';
+         }
+
+        // --- Layer Order Functions ---
+        function bringForward() {
+            if (!selectedSprite) return;
+            const parent = selectedSprite.parent;
+            if (!parent) return;
+            const currentIndex = parent.getChildIndex(selectedSprite);
+            const topIndex = parent.children.length - 1;
+            if (currentIndex < topIndex) {
+                parent.setChildIndex(selectedSprite, currentIndex + 1);
+                console.log("Brought forward");
+                updateLayerButtonsState();
+            }
+        }
+
+        function sendBackward() {
+            if (!selectedSprite) return;
+            const parent = selectedSprite.parent;
+            if (!parent) return;
+            const currentIndex = parent.getChildIndex(selectedSprite);
+            if (currentIndex > 0) {
+                parent.setChildIndex(selectedSprite, currentIndex - 1);
+                console.log("Sent backward");
+                updateLayerButtonsState();
+            }
+        }
+
+        function updateLayerButtonsState() {
+            if (!layerUpButton || !layerDownButton) return;
+            if (!selectedSprite) {
+                layerUpButton.disabled = true;
+                layerDownButton.disabled = true;
+            } else {
+                const parent = selectedSprite.parent;
+                const currentIndex = parent.getChildIndex(selectedSprite);
+                const topIndex = parent.children.length - 1;
+                layerUpButton.disabled = (currentIndex >= topIndex);
+                layerDownButton.disabled = (currentIndex <= 0);
+            }
+        }
+
+        // --- Clipboard Functions ---
+        async function dataURLtoBlob(dataurl) {
+            try {
+                const res = await fetch(dataurl);
+                const blob = await res.blob();
+                return blob;
+            } catch (e) {
+                console.error("Error converting data URL to Blob:", e);
+                return null;
+            }
+        }
+
+        const converterCan = document.createElement('canvas');
+        const converterCtx = converterCan.getContext('2d');
+        const converterImg = new Image();
+        async function convertImgToClipboardFormat( base64src ){
+          return new Promise( ( resolveImage, rejectImage ) => {
+            try{
+              converterImg.onload = () => {
+                converterCan.width = converterImg.width;
+                converterCan.height = converterImg.height;
+                converterCtx.drawImage( converterImg, 0, 0 );
+                converterCan.toBlob( resolveImage, 'image/png', 0.8 );
+              };
+              converterImg.src = base64src;
+            }catch( err ){
+              rejectImage( err );
+            }
+          } );
+        }
+
+        async function copyOriginalImageToClipboard() {
+            const contextMenuBase64 = contextMenuTargetSprite?.base64src;
+            const selectedBase64 = selectedSprite?.base64src; 
+            if (!contextMenuBase64 && !selectedBase64) return;
+            const base64src = contextMenuBase64 || selectedBase64;
+            hideContextMenu( true ); // Hide menu immediately
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.write) {
+                    throw new Error('Clipboard write API not available');
+                }
+                // const blob = await dataURLtoBlob(base64src);
+                const blob = await convertImgToClipboardFormat( base64src );
+                if (!blob) { throw new Error('Failed to convert Base64 to Blob'); }
+                const newClipboardItemData = new ClipboardItem({ [blob.type]: blob }); 
+                const result = await navigator.clipboard.write([ newClipboardItemData ]); 
+                console.log('Original image copied as Blob');
+                // alert('Original Image Copied!');
+            } catch (err) {
+                console.warn('Failed to copy image as Blob, falling back to text:', err);
+                try {
+                    await navigator.clipboard.writeText(base64src);
+                    console.log('Original image Base64 copied as text');
+                    // alert('Original Image Copied (as text)!');
+                } catch (textErr) {
+                    console.error('Failed to copy original image Base64 text: ', textErr);
+                    // alert('Failed to copy original image. Check permissions or console.');
+                }
+            }
+        }
+
+        async function copyCanvasToClipboard() {
+             hideContextMenu( true ); // Hide menu immediately
+             try {
+                 if (!navigator.clipboard || !navigator.clipboard.write) {
+                     throw new Error('Clipboard write API not available');
+                 }
+                 // 1. Extract canvas as Base64
+                 const base64src = await app.renderer.extract.base64(app.stage);
+                 // 2. Convert Base64 to Blob
+                //  const blob = await dataURLtoBlob(base64);
+                 const blob = await convertImgToClipboardFormat( base64src );
+                 if (!blob) { throw new Error('Failed to convert canvas Base64 to Blob'); }
+                 // 3. Write Blob to clipboard
+                 await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
+                 console.log('Canvas image copied as Blob');
+                 alert('Canvas Copied!');
+             } catch (err) {
+                 console.error('Failed to copy canvas image as Blob: ', err);
+                 try { // Fallback
+                     console.log('Falling back to copying canvas base64 text...');
+                     const base64Fallback = await app.renderer.extract.base64(app.stage);
+                     await navigator.clipboard.writeText(base64Fallback);
+                     console.log('Canvas Base64 copied as text');
+                     alert('Canvas Copied (as text)!');
+                 } catch (fallbackErr) {
+                     console.error('Fallback canvas base64 copy failed:', fallbackErr);
+                     alert('Failed to copy canvas. Check permissions or console.');
+                 }
+             }
+         }
+
+        function onSpriteContextMenu( event ){
+          if (event.data?.originalEvent?.button !== 2 && event.nativeEvent?.button !== 2) return; 
+          const sprite = event.currentTarget;
+          if (selectedSprite === sprite) {
+              event.data.originalEvent.preventDefault(); // Prevent browser menu
+              showContextMenu(event.global.x, event.global.y, sprite); // Show custom menu
+          } else {
+              // Prevent default menu even on non-selected sprites
+              event.data.originalEvent.preventDefault();
+                console.log("Right-click on non-selected sprite ignored for menu.");
+          }
+        }
+
+        // --- EVENT HANDLERS ---
+        function onSpritePointerDown(event) {
+             onSpriteContextMenu( event ); 
+             if (event.data?.originalEvent?.button !== 0 && event.nativeEvent?.button !== 0) return;
+             const sprite = event.currentTarget;
+             selectSprite(sprite);
+             actionTarget = sprite;
+             startDragPosition = event.global.clone();
+             const localClickPos = mainContainer.toLocal(startDragPosition);
+             startDragScale = { x: actionTarget.scale.x, y: actionTarget.scale.y };
+             startDragRotation = actionTarget.rotation;
+             actionTargetOffset = { x: actionTarget.x - localClickPos.x, y: actionTarget.y - localClickPos.y };
+             setCanvasCursor(interactionMode);
+        }
+
+        // Removed onSpritePointerUp - right click handled by sprite's contextmenu listener
+
+        function showContextMenu(x, y, sprite) { 
+             hideContextMenu( true );
+             contextMenuTargetSprite = sprite;
+             // Keep menu within viewport bounds (simple check)
+             const menuWidth = contextMenuDOM.offsetWidth || 150;
+             const menuHeight = contextMenuDOM.offsetHeight || 60;
+             const adjustedX = Math.min(x, window.innerWidth - menuWidth - 10);
+             const adjustedY = Math.min(y, window.innerHeight - menuHeight - 10);
+             contextMenuDOM.style.left = `${adjustedX}px`;
+             contextMenuDOM.style.top = `${adjustedY}px`;
+             contextMenuDOM.style.display = 'block';
+        }
+
+        function hideContextMenu( sure ) { 
+          if(!sure) return false;
+            contextMenuDOM.style.display = 'none';
+            contextMenuTargetSprite = null;
+        }
+
+        function onStagePointerDown(event) {
+            // Deselect if clicking background
+            if (event.target === app.stage) {
+                deselectSprite();
+            }
+            // Hide context menu if clicking anywhere on stage (and not on the menu itself)
+            // The window listener handles clicks outside canvas/menu
+            if (contextMenuDOM.style.display === 'block' && !contextMenuDOM.contains(event.data?.originalEvent?.target)) {
+               hideContextMenu(   );
+           }
+        }
+
+        function onGlobalPointerMove(event) {
+             if (isPanning || !actionTarget) return;
+             const currentGlobalPos = event.global.clone();
+             const currentLocalPos = mainContainer.toLocal(currentGlobalPos);
+             const startLocalPos = mainContainer.toLocal(startDragPosition);
+             const dx = currentLocalPos.x - startLocalPos.x;
+             const dy = currentLocalPos.y - startLocalPos.y;
+
+             if (interactionMode === 'move') {
+                 actionTarget.x = currentLocalPos.x + actionTargetOffset.x;
+                 actionTarget.y = currentLocalPos.y + actionTargetOffset.y;
+             } else if (interactionMode === 'scale') {
+                const spriteCenterX = actionTarget.x; const spriteCenterY = actionTarget.y;
+                const startDist = Math.sqrt(Math.pow(startLocalPos.x - spriteCenterX, 2) + Math.pow(startLocalPos.y - spriteCenterY, 2));
+                const currentDist = Math.sqrt(Math.pow(currentLocalPos.x - spriteCenterX, 2) + Math.pow(currentLocalPos.y - spriteCenterY, 2));
+                let scaleRatio = 1; if (startDist > 1) { scaleRatio = currentDist / startDist; }
+                let newScaleX = startDragScale.x * scaleRatio; let newScaleY = startDragScale.y * scaleRatio;
+                const minPixelSize = 10; const textureWidth = actionTarget.texture.width || 1; const textureHeight = actionTarget.texture.height || 1;
+                if (Math.abs(textureWidth * newScaleX) < minPixelSize && textureWidth > 0) { newScaleX = Math.sign(newScaleX || 1) * minPixelSize / textureWidth; }
+                if (Math.abs(textureHeight * newScaleY) < minPixelSize && textureHeight > 0) { newScaleY = Math.sign(newScaleY || 1) * minPixelSize / textureHeight; }
+                actionTarget.scale.set(newScaleX, newScaleY);
+             } else if (interactionMode === 'rotate') {
+                 const angleNow = Math.atan2(currentLocalPos.y - actionTarget.y, currentLocalPos.x - actionTarget.x);
+                 const angleStart = Math.atan2(startLocalPos.y - actionTarget.y, startLocalPos.x - actionTarget.x);
+                 actionTarget.rotation = startDragRotation + (angleNow - angleStart);
+             }
+             updateSelectionBox();
+         }
+
+         function onGlobalPointerUp(event) {
+             if (actionTarget) {
+                 actionTarget = null;
+                 setCanvasCursor(null);
+             }
+         }
+
+        function onCanvasWheel(event) {
+             hideContextMenu( true );
+             if (actionTarget) return;
+             event.preventDefault();
+             const scaleFactor = 1.1;
+             const stagePoint = new PIXI.Point(event.clientX, event.clientY);
+             const localPoint = app.stage.toLocal(stagePoint);
+             let newScale; if (event.deltaY < 0) { newScale = mainContainer.scale.x * scaleFactor; } else { newScale = mainContainer.scale.x / scaleFactor; }
+             newScale = Math.max(0.05, Math.min(newScale, 20));
+             const oldScale = mainContainer.scale.x; if (Math.abs(oldScale - newScale) < 0.0001) return;
+             mainContainer.x = localPoint.x - (localPoint.x - mainContainer.x) * (newScale / oldScale);
+             mainContainer.y = localPoint.y - (localPoint.y - mainContainer.y) * (newScale / oldScale);
+             mainContainer.scale.set(newScale);
+             updateSelectionBox();
+        }
+
+        function onCanvasPointerDown(event) {
+            // Hide context menu if clicking canvas background (handled by window listener too, but good redundancy)
+            if (contextMenuDOM.style.display === 'block' && !contextMenuDOM.contains(event.target)) {
+                 hideContextMenu();
+            }
+            // Start panning on middle click
+            if (event.button === 1 && !actionTarget) { startPanning(event); }
+        }
+
+        function startPanning(event) {
+            isPanning = true;
+            lastPanPosition = { x: event.clientX, y: event.clientY };
+            setCanvasCursor('pan');
+            event.preventDefault();
+        }
+
+        function onWindowPointerMovePan(event) {
+             if (isPanning) {
+                 hideContextMenu( true ); // Hide menu if panning starts/continues
+                 const dx = event.clientX - lastPanPosition.x;
+                 const dy = event.clientY - lastPanPosition.y;
+                 mainContainer.x += dx;
+                 mainContainer.y += dy;
+                 lastPanPosition = { x: event.clientX, y: event.clientY };
+                 updateSelectionBox();
+             }
+         }
+
+         function onWindowPointerUpPan(event) {
+             if (event.button === 1 && isPanning) {
+                 isPanning = false;
+                 setCanvasCursor(null);
+             }
+         }
+
+        function onCanvasContextMenu(event) {
+             // Prevent default ONLY if the right-click was directly on the canvas background
+             if (event.target === app.view) {
+                event.preventDefault();
+                hideContextMenu();
+             }
+             // Events on sprites are handled by the sprite's 'contextmenu' listener
+        }
+
+        function setCanvasCursor(mode) {
+            let cursor = 'grab';
+            if (isPanning) { cursor = 'move'; }
+            else if (actionTarget) {
+                if (mode === 'move') cursor = 'grabbing';
+                else if (mode === 'scale') cursor = 'nwse-resize';
+                else if (mode === 'rotate') cursor = 'alias';
+                else cursor = 'grabbing';
+            } else if (selectedSprite){
+                if (interactionMode === 'scale') cursor = 'nwse-resize';
+                else if (interactionMode === 'rotate') cursor = 'alias';
+                else cursor = 'pointer';
+            }
+            canvasContainer.style.cursor = cursor;
+        }
+
+        // --- File Drag and Drop Setup & Handling ---
+        function setupDragAndDrop() {
+            canvasContainer.addEventListener('dragover', (event) => { event.preventDefault(); });
+            canvasContainer.addEventListener('drop', (event) => {
+                event.preventDefault();
+                if (event.dataTransfer.files) { handleFiles(event.dataTransfer.files); }
+            });
+            window.addEventListener('paste', handlePaste);
+        }
+
+        function handleFiles(files) {
+            for (const file of files) {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => addImageToScene(e.target.result);
+                    reader.onerror = (e) => console.error("File reading error:", file.name, e);
+                    reader.readAsDataURL(file);
+                } else { console.warn("Ignored non-image file:", file.name, file.type); }
+            }
+        }
+        /**
+         * Handles the 'paste' event to retrieve image files from the clipboard.
+         * @param {ClipboardEvent} event The paste event object.
+         */
+        async function handlePaste(event) {
+            // Access clipboard data
+            const clipboardData = event.clipboardData || window.clipboardData;
+            if (!clipboardData) {
+                console.warn("Clipboard data not accessible.");
+                return;
+            }
+
+            // Prevent default paste behavior ONLY if we find and handle an image.
+            // This allows pasting text into potential future text fields.
+            let preventDefault = false;
+
+            // Create an array to hold found image files
+            const imageFiles = [];
+
+            // 1. Check clipboardData.files (most direct way for copied files)
+            if (clipboardData.files && clipboardData.files.length > 0) {
+                for (let i = 0; i < clipboardData.files.length; i++) {
+                    if (clipboardData.files[i].type.startsWith('image/')) {
+                        imageFiles.push(clipboardData.files[i]);
+                        preventDefault = true; // We found an image, prevent default paste
+                    }
+                }
+            }
+            // 2. If no files found above, check clipboardData.items
+            //    (Handles image data pasted from editors like MS Paint, Snipping Tool, etc.)
+            else if (clipboardData.items && clipboardData.items.length > 0) {
+                for (let i = 0; i < clipboardData.items.length; i++) {
+                    const item = clipboardData.items[i];
+                    if (item.kind === 'file' && item.type.startsWith('image/')) {
+                        const file = item.getAsFile(); // Get the item as a File object
+                        if (file) {
+                            imageFiles.push(file);
+                            preventDefault = true; // We found an image, prevent default paste
+                        }
+                    }
+                }
+            }
+
+            // If we found image files, prevent default browser paste and process them
+            if (preventDefault) {
+                event.preventDefault();
+                console.log(`Pasting ${imageFiles.length} image(s)...`);
+                // Call your existing function that handles FileLists or arrays of Files
+                handleFiles(imageFiles);
+            } else {
+                console.log("No image files found in clipboard for pasting.");
+                // Let the default paste behavior occur if no image was found
+            }
+        }
+
+
+        // --- Setup UI Controls ---
+        function setupControls() {
+            const modeMoveBtn = document.getElementById('mode-move');
+            const modeScaleBtn = document.getElementById('mode-scale');
+            const modeRotateBtn = document.getElementById('mode-rotate');
+            const modeButtons = [modeMoveBtn, modeScaleBtn, modeRotateBtn];
+            layerUpButton = document.getElementById('layer-up');
+            layerDownButton = document.getElementById('layer-down');
+            const newButton = document.getElementById('new-button');
+            const saveButton = document.getElementById('save-button');
+            const loadInput = document.getElementById('load-input');
+            const copyOriginalBtn = document.getElementById('copy-original-btn');
+            const copyCanvasBtn = document.getElementById('copy-canvas-btn');
+            const deleteImageBtn = document.getElementById('delete-image-btn');
+
+            function setActiveMode(newMode) {
+                interactionMode = newMode;
+                modeButtons.forEach(btn => btn.classList.remove('active'));
+                if (newMode === 'move') modeMoveBtn.classList.add('active');
+                else if (newMode === 'scale') modeScaleBtn.classList.add('active');
+                else if (newMode === 'rotate') modeRotateBtn.classList.add('active');
+                setCanvasCursor(null);
+            }
+            modeMoveBtn.addEventListener('click', () => setActiveMode('move'));
+            modeScaleBtn.addEventListener('click', () => setActiveMode('scale'));
+            modeRotateBtn.addEventListener('click', () => setActiveMode('rotate'));
+            layerUpButton.addEventListener('click', bringForward);
+            layerDownButton.addEventListener('click', sendBackward);
+            newButton.addEventListener('click', newScene);
+            saveButton.addEventListener('click', saveSceneToFile);
+            loadInput.addEventListener('change', loadSceneFromFile);
+            // Context Menu Button Listeners
+            copyOriginalBtn.addEventListener('click', copyOriginalImageToClipboard);
+            copyCanvasBtn.addEventListener('click', copyCanvasToClipboard);
+            deleteImageBtn.addEventListener('click', deleteSelectedImage);
+
+            window.addEventListener('keydown', ( e ) => {
+              if( e.key.toLowerCase() === 'delete' ) {
+                deleteSelectedImage(e);
+              } 
+              if( e.key.toLowerCase() === 'c' && e.ctrlKey ){
+                console.log('test');
+                copyOriginalImageToClipboard(e);
+              }
+            });
+
+            updateLayerButtonsState();
+        }
+
+        // --- Image Deletion Function ---
+        function deleteSelectedImage() {
+            // Перевіряємо, чи є що видаляти (через contextMenuTargetSprite або selectedSprite)
+            const spriteToDelete = contextMenuTargetSprite || selectedSprite;
+
+            if (spriteToDelete) {
+                hideContextMenu( true ); // Ховаємо меню
+
+                // Видаляємо спрайт з батьківського контейнера (mainContainer)
+                spriteToDelete.parent.removeChild(spriteToDelete);
+
+                // Важливо: Знищуємо спрайт, щоб звільнити ресурси WebGL/Canvas
+                // true для children (якщо були), false для texture/baseTexture, щоб кеш текстур працював
+                spriteToDelete.destroy({ children: true, texture: false, baseTexture: false });
+
+                console.log("Image deleted");
+
+                // Якщо видалений спрайт був виділеним, очищуємо виділення
+                if (selectedSprite === spriteToDelete) {
+                    selectedSprite = null; // Очищаємо selectedSprite
+                    selectionBoxDOM.style.display = 'none'; // Ховаємо рамку
+                    updateLayerButtonsState(); // Оновлюємо стан кнопок шарів
+                }
+                 // Також очищаємо contextMenuTargetSprite, якщо він був встановлений
+                 if (contextMenuTargetSprite === spriteToDelete) {
+                     contextMenuTargetSprite = null;
+                 }
+
+                 // Можна додати тригер автозбереження тут, якщо потрібно
+                 // saveStateToDB(getCurrentSceneState());
+            } else {
+                 console.warn("No image targeted for deletion.");
+                 hideContextMenu( true ); // Ховаємо меню
+            }
+        }
+
+        // --- Save/Load/Clear Functions ---
+        function saveSceneToFile() {
+            const sceneData = getCurrentSceneState();
+            try {
+                const jsonData = JSON.stringify(sceneData);
+                const blob = new Blob([jsonData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `scene_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                console.log("Scene saved to file.");
+            } catch (error) {
+                console.error("Error saving scene to file:", error);
+                alert("An error occurred while saving the scene.");
+            }
+        }
+
+        function loadSceneFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const sceneData = JSON.parse(e.target.result);
+                    loadSceneData(sceneData);
+                    console.log("Scene loaded from file.");
+                    saveStateToDB(sceneData).catch(err => console.error("Error updating autosave after load", err));
+                } catch (error) {
+                    console.error("Error parsing JSON or loading scene:", error);
+                    alert("Failed to load scene file. Ensure it's a valid JSON file.");
+                } finally { event.target.value = null; }
+            };
+            reader.onerror = (e) => {
+                console.error("File reading error:", file.name, e);
+                alert(`Error reading file: ${file.name}`);
+                event.target.value = null;
+            };
+            reader.readAsText(file);
+        }
+
+        function loadSceneData(sceneData) {
+             clearScene(false);
+             if (sceneData.container) {
+                 mainContainer.x = sceneData.container.x ?? 0;
+                 mainContainer.y = sceneData.container.y ?? 0;
+                 mainContainer.scale.set(sceneData.container.scaleX ?? 1, sceneData.container.scaleY ?? 1);
+             } else {
+                 mainContainer.x = 0; mainContainer.y = 0; mainContainer.scale.set(1);
+             }
+             if (sceneData.images && Array.isArray(sceneData.images)) {
+                 sceneData.images.forEach(imgData => { addImageToScene(imgData.src, imgData); });
+             }
+             updateSelectionBox();
+        }
+
+        function newScene() {
+             if (confirm("Are you sure you want to clear the scene? Autosaved data will also be cleared.")) {
+                 clearScene(true);
+             }
+        }
+
+        function clearScene(clearAutosave = false) {
+            deselectSprite();
+            while (mainContainer.children.length > 0) {
+                mainContainer.removeChildAt(0).destroy({ children: true, texture: false, baseTexture: false });
+            }
+            mainContainer.x = 0; mainContainer.y = 0; mainContainer.scale.set(1);
+            updateSelectionBox();
+            console.log("Scene cleared.");
+            if (clearAutosave) {
+                saveStateToDB({ images: [], container: {x:0, y:0, scaleX:1, scaleY:1} })
+                    .then(() => console.log("Autosave cleared."))
+                    .catch(err => console.error("Error clearing autosave:", err));
+            }
+        }
+
+        // --- Start the application ---
+        window.onload = initPixi;
+        window.onbeforeunload = () => { stopAutosave(); };
+
+    </script>
+
+</body>
+</html>
