@@ -1445,7 +1445,7 @@ try{
 const textData = [];
 // prevent saveing workflow into data
 const skipComfyWorkflow = true;
-if( skipComfyWorkflow && asJSON.version && asJSON.revision ){
+if( skipComfyWorkflow && ( 'version' in asJSON ) && ( 'revision' in asJSON ) ){
         return '';
 }
 for( const nextID in asJSON ){
