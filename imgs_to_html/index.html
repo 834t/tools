@@ -1443,6 +1443,11 @@ try{
     asJSON = JSON.parse( test  );
 } catch( _err ){ err = _err; }
 const textData = [];
+// prevent saveing workflow into data
+const skipComfyWorkflow = true;
+if( skipComfyWorkflow && asJSON.version && asJSON.revision ){
+        return '';
+}
 for( const nextID in asJSON ){
     const nextNode = asJSON[ nextID ];
     const class_type = nextNode.class_type.toLowerCase();
