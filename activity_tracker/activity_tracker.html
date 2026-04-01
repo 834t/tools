@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Tracker Zero</title>
+    <style>
+/* --- General & Layout --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    background: #1e1c1a; /* Night warm background */
+    color: #e4e1db; /* Warm off-white */
+    line-height: 1.6;
+}
+
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #3c3835;
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+.footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #3c3835;
+    display: flex;
+    gap: 12px;
+}
+
+/* --- Buttons --- */
+.button {
+    border: none;
+    border-radius: 4px;
+    padding: 10px 18px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+.button.primary { background-color: #c87a55; color: #1e1c1a; }
+.button.primary:hover { background-color: #b56c49; }
+.button.secondary { background-color: #3c3835; color: #e4e1db; }
+.button.secondary:hover { background-color: #4a4540; }
+.button.danger { background-color: #bf5f5f; color: #1e1c1a; }
+.button.danger:hover { background-color: #a85454; }
+.button.small { padding: 6px 12px; font-size: 12px; }
+
+/* --- Forms --- */
+input[type="text"], textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #3c3835;
+    background: #1e1c1a;
+    color: #e4e1db;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+}
+textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+input[type="text"]::placeholder, textarea::placeholder {
+    color: #6a635e;
+}
+input[type="text"]:focus, textarea:focus {
+    outline: none;
+    border-color: #c87a55;
+}
+
+/* --- Project List View --- */
+#project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.project-item {
+    padding: 16px;
+    background: #272422;
+    border-radius: 6px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+}
+.project-name {
+    font-weight: 500;
+    white-space: nowrap;
+}
+.sparkline {
+    width: 100%;
+    height: 40px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.sparkline:hover {
+    opacity: 0.8;
+}
+.icon-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+.project-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* --- Year View --- */
+.year-nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.year-view-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+.year-month-container {
+    background: #272422;
+    border-radius: 6px;
+    padding: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.year-month-container:hover {
+    background: #2e2a28;
+}
+.year-view-hours {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    color: rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+    text-shadow: -1px -1px 1px rgba(236, 236, 236, 0.5), -1px 0px 1px rgba(216, 216, 216, 0.5);
+}
+.year-view-month-total-hours{
+    font-size: 10px;
+    color: #a19a91;
+    margin-left: 6px;
+}
+.month-name {
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 10px;
+}
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+.calendar-day {
+    width: 100%;
+    padding-bottom: 100%; /* Aspect ratio 1:1 */
+    border-radius: 2px;
+    position:relative;
+    background-color: #3c3835;
+}
+.calendar-day.empty {
+    background-color: transparent;
+}
+
+/* --- Month View --- */
+.month-view-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #a19a91;
+}
+.month-view-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+.month-view-day {
+    min-height: 100px;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter 0.2s;
+}
+.month-view-day:hover {
+    filter: brightness(1.2);
+}
+.month-view-day span {
+    font-size: 16px;
+    font-weight: 500;
+}
+.month-view-hours{
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 12px;
+    border-radius: 15px;
+    border: 1px dashed;
+    padding: 1px 5px;
+}
+.weekend { color: #bf5f5f; }
+
+/* --- Week View --- */
+.week-view-container {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 16px;
+    background: #272422;
+    padding: 24px;
+    border-radius: 6px;
+}
+.week-day-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+.week-bar-container {
+    height: 300px;
+    width: 40px;
+    background: #3c3835;
+    border-radius: 4px;
+    position: relative;
+    margin: 16px 0;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+}
+.week-bar-hours{
+    position: absolute; 
+    top: 4px; 
+    left: 50%; 
+    transform: translateX(-50%);
+    font-size: 10px;
+}
+.week-bar-fill {
+    width: 100%;
+    transition: height 0.3s, background-color 0.3s;
+}
+.hash-marks {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: space-around;
+    pointer-events: none;
+}
+.hash-mark {
+    border-top: 1px solid #4a4540;
+}
+.note-badge {
+    background: #d69f4c;
+    color: #1e1c1a;
+    border-radius: 50%;
+    border: 1px solid #333333;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    cursor: help;
+    margin-top: 8px;
+    position: relative;
+    user-select: none;
+}
+.month-view-note.note-badge{
+    width: 16px; height: 16px; 
+    position: absolute; 
+    bottom: 4px; 
+    left: 4px; 
+    font-size: 10px;
+}
+.note-tooltip {
+    visibility: hidden; position: absolute; bottom: 120%; left: 50%;
+    transform: translateX(-50%); background: #1e1c1a; color: #e4e1db; padding: 8px 12px;
+    border: 1px solid #3c3835;
+    border-radius: 4px; width: max-content; max-width: 250px;
+    font-size: 13px; font-weight: normal; z-index: 10;
+    opacity: 0; transition: opacity 0.2s, visibility 0.2s;
+    pointer-events: none;
+}
+.note-badge:hover .note-tooltip { visibility: visible; opacity: 1; }
+
+/* --- Day View --- */
+.day-view-container {
+    background: #272422;
+    padding: 24px;
+    border-radius: 6px;
+}
+.timeline {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+    margin: 24px 0;
+}
+.timeline-hour {
+    cursor: pointer;
+    text-align: center;
+}
+.hour-box {
+    height: 40px;
+    border-radius: 2px;
+    transition: filter 0.2s;
+}
+.hour-box:hover {
+    filter: brightness(1.3);
+}
+.hour-num {
+    font-size: 11px;
+    color: #a19a91;
+    margin-bottom: 4px;
+}
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+    // --- DEPENDENCY INJECTION CONTROLLER ---
+    class DependenciesController {
+        constructor() {
+            this.modules = {};
+        }
+
+        add(name, factory) {
+            this.modules[name] = { factory, instance: null, resolved: false };
+        }
+
+        get(name) {
+            if (!this.modules[name]) {
+                throw new Error(`Module ${name} not found`);
+            }
+            if (!this.modules[name].resolved) {
+                this.modules[name].instance = this.modules[name].factory(this);
+                this.modules[name].resolved = true;
+            }
+            return this.modules[name].instance;
+        }
+    }
+
+    const DI = new DependenciesController();
+
+    // --- MODULE: STORAGE ---
+    DI.add('storage', (di) => {
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('activity-tracker', 2);
+                request.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
+                    if (!db.objectStoreNames.contains('activities')) db.createObjectStore('activities', { keyPath: 'id' });
+                    if (!db.objectStoreNames.contains('notes')) db.createObjectStore('notes', { keyPath: 'id' });
+                };
+                request.onsuccess = e => resolve(e.target.result);
+                request.onerror = e => reject(e.target.error);
+            });
+        }
+
+        async function add(store, value) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(store, 'readwrite');
+                const req = tx.objectStore(store).add(value);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function put(store, value) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(store, 'readwrite');
+                const req = tx.objectStore(store).put(value);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function getAll(store) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(store, 'readonly');
+                const req = tx.objectStore(store).getAll();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function remove(store, key) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(store, 'readwrite');
+                const req = tx.objectStore(store).delete(key);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        return { openDB, add, put, getAll, remove };
+    });
+
+    // --- MODULE: PROJECT MANAGER ---
+    DI.add('ProjectManager', (di) => {
+        const { openDB, getAll, put, remove } = di.get('storage');
+
+        const formatDate = (date) => date.toISOString().split('T')[0];
+        const isWeekend = (date) => [0, 6].includes(date.getDay());
+
+        function getIntensityColor(hours) {
+            if (hours === 0) return '#3c3835';
+            const p = Math.min(hours / 10, 1);
+
+            if (p <= 1/3) {
+                const t = p * 3;
+                const r = Math.round(60 + t * (123 - 60));
+                const g = Math.round(56 + t * (201 - 56));
+                const b = Math.round(53 + t * (111 - 53));
+                return `rgb(${r},${g},${b})`;
+            } else if (p <= 2/3) {
+                const t = (p - 1/3) * 3;
+                const r = Math.round(123 + t * (255 - 123));
+                const g = Math.round(201 + t * (0 - 201));
+                const b = Math.round(111 + t * (0 - 111));
+                return `rgb(${r},${g},${b})`;
+            } else {
+                const t = (p - 2/3) * 3;
+                const r = Math.round(255 + t * (128 - 255));
+                const g = 0;
+                const b = Math.round(0 + t * (128 - 0));
+                return `rgb(${r},${g},${b})`;
+            }
+        }
+
+        function getWeekRange(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(d.setDate(diff));
+
+            const week = [];
+            for (let i = 0; i < 7; i++) {
+                const nextDay = new Date(monday);
+                nextDay.setDate(monday.getDate() + i);
+                week.push(nextDay);
+            }
+            return week;
+        }
+
+        class ProjectManager {
+            constructor(root) {
+                this.root = root;
+                this.projects = [];
+                this.selectedProjectId = null;
+                this.activities = {};
+                this.notes = {};
+                this.allActivities = {};
+                this.viewState = 'projects';
+                this.currentDate = new Date();
+            }
+
+            async init() {
+                await openDB();
+                await this.loadProjects();
+                await this.loadAllActivities();
+                this.render();
+
+                window.addEventListener('resize', () => {
+                    if (this.viewState === 'projects') {
+                        this.projects.forEach(p => this.drawSparkline(p.id));
+                    } else if (this.viewState === 'year') {
+                        this.drawSparkline(this.selectedProjectId, 'sparkline-year', this.currentDate.getFullYear());
+                    }
+                });
+            }
+
+            async loadAllActivities() {
+                const allActivities = await getAll('activities');
+                this.allActivities = allActivities.reduce((acc, curr) => {
+                    const [projId, date] = curr.id.split('_');
+                    if (!acc[projId]) {
+                        acc[projId] = {};
+                    }
+                    acc[projId][date] = curr.hours;
+                    return acc;
+                }, {});
+            }
+
+            async loadProjects() {
+                this.projects = await getAll('projects');
+                let updated = false;
+                for (let p of this.projects) {
+                    if (!p.colors || p.colors.length !== 11) {
+                        p.colors = Array.from({length: 11}, (_, i) => getIntensityColor(i));
+                        updated = true;
+                    }
+                    if (!p.metricLabel) {
+                        p.metricLabel = "Activity level";
+                        updated = true;
+                    }
+                    if (updated) {
+                        await put('projects', p);
+                    }
+                }
+                
+                if (this.projects.length && !this.selectedProjectId) {
+                    this.selectedProjectId = this.projects[0].id;
+                }
+            }
+
+            async loadProjectData() {
+                if (!this.selectedProjectId) return;
+                const allActivities = await getAll('activities');
+                const allNotes = await getAll('notes');
+
+                this.activities = allActivities
+                    .filter(a => a.id.startsWith(this.selectedProjectId + '_'))
+                    .reduce((acc, curr) => {
+                        acc[curr.id.split('_')[1]] = curr.hours;
+                        return acc;
+                    }, {});
+
+                this.notes = allNotes
+                    .filter(n => n.id.startsWith(this.selectedProjectId + '_'))
+                    .reduce((acc, curr) => {
+                        acc[curr.id.split('_')[1]] = curr.text;
+                        return acc;
+                    }, {});
+            }
+
+            changeYear(offset) {
+                this.currentDate.setFullYear(this.currentDate.getFullYear() + offset);
+                this.render();
+            }
+
+            async addProject(name) {
+                const id = 'proj-' + Date.now();
+                await put('projects', { id, name });
+                await this.loadProjects();
+                this.selectedProjectId = id;
+                this.viewState = 'year';
+                await this.loadProjectData();
+                this.render();
+            }
+
+            async deleteProject(id, name) {
+                const confirmation = prompt(`To confirm deletion of "${name}", please type: 1234567890`);
+                if (confirmation !== "1234567890") {
+                    alert('Confirmation code did not match. Deletion cancelled.');
+                    return;
+                }
+
+                await remove('projects', id);
+                
+                const allActivities = await getAll('activities');
+                for(const act of allActivities) {
+                    if (act.id.startsWith(id + '_')) await remove('activities', act.id);
+                }
+                const allNotes = await getAll('notes');
+                for(const note of allNotes) {
+                    if (note.id.startsWith(id + '_')) await remove('notes', note.id);
+                }
+
+                delete this.allActivities[id];
+
+                this.selectedProjectId = this.projects.length > 1 ? this.projects.find(p => p.id !== id).id : null;
+                await this.loadProjects();
+                this.viewState = 'projects';
+                this.render();
+            }
+
+            async exportProject(projectId) {
+                const project = this.projects.find(p => p.id === projectId);
+                if (!project) return;
+
+                const activities = await getAll('activities');
+                const projectActivities = activities.filter(a => a.id.startsWith(projectId + '_'));
+                const notes = await getAll('notes');
+                const projectNotes = notes.filter(n => n.id.startsWith(projectId + '_'));
+
+                const exportData = {
+                    project,
+                    activities: projectActivities,
+                    notes: projectNotes
+                };
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `${project.name}_export.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            }
+
+            async importProject(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.project && data.activities && data.notes) {
+                            const newId = 'proj-' + Date.now();
+                            const oldId = data.project.id;
+                            data.project.id = newId;
+
+                            await put('projects', data.project);
+
+                            const activityPromises = data.activities.map(activity => {
+                                activity.id = activity.id.replace(oldId, newId);
+                                return put('activities', activity);
+                            });
+                            await Promise.all(activityPromises);
+
+                            const notePromises = data.notes.map(note => {
+                                note.id = note.id.replace(oldId, newId);
+                                return put('notes', note);
+                            });
+                            await Promise.all(notePromises);
+
+                            await this.init();
+                        } else {
+                            alert('Invalid project file format.');
+                        }
+                    } catch (e) {
+                        console.error("Error parsing project file:", e);
+                        alert('Error reading or parsing project file.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            async selectProject(id) {
+                this.selectedProjectId = id;
+                this.viewState = 'year';
+                await this.loadProjectData();
+                this.render();
+            }
+
+            render() {
+                this.root.innerHTML = '';
+                switch (this.viewState) {
+                    case 'projects':
+                        this.loadAllActivities().then(() => this.renderProjectList());
+                        return;
+                    case 'year':
+                        this.renderYearView();
+                        break;
+                    case 'month':
+                        this.renderMonthView();
+                        break;
+                    case 'week':
+                        this.renderWeekView();
+                        break;
+                    case 'day':
+                        this.renderDayView();
+                        break;
+                    case 'settings':
+                        this.renderProjectSettings();
+                        break;
+                }
+            }
+
+            renderProjectList() {
+                this.root.innerHTML = `
+                    <div class="header">
+                        <h2>Activity Tracker Projects</h2>
+                        <button class="button" id="import-project-btn">Import Project</button>
+                    </div>
+                    <div id="project-list"></div>
+                    <div class="footer">
+                        <input type="text" id="new-project-name" placeholder="New project name...">
+                        <button class="button primary" id="add-project-btn">Add Project</button>
+                    </div>
+                `;
+
+                this.root.querySelector('#import-project-btn').onclick = () => {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = '.json';
+                    fileInput.onchange = (e) => this.importProject(e.target.files[0]);
+                    fileInput.click();
+                };
+
+                const listEl = this.root.querySelector('#project-list');
+                this.projects.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'project-item';
+                    item.innerHTML = `
+                        <span class="project-name" style="cursor:pointer;" title="Open Project">${p.name}</span>
+                        <canvas class="sparkline" id="sparkline-${p.id}" title="Open Project"></canvas>
+                        <div class="project-buttons">
+                            <button class="button secondary small icon-btn" data-id="${p.id}" title="Settings">⚙️</button>
+                            <button class="button secondary small icon-btn" data-id="${p.id}" title="Export JSON">💾</button>
+                            <button class="button danger small icon-btn" data-id="${p.id}" title="Delete Project">🗑️</button>
+                        </div>
+                    `;
+
+                    const openProjectHandler = () => this.selectProject(p.id);
+                    item.querySelector('.project-name').onclick = openProjectHandler;
+                    item.querySelector('.sparkline').onclick = openProjectHandler;
+
+                    item.querySelectorAll('.secondary')[0].onclick = () => {
+                        this.selectedProjectId = p.id;
+                        this.viewState = 'settings';
+                        this.render();
+                    };
+                    item.querySelectorAll('.secondary')[1].onclick = () => this.exportProject(p.id);
+                    item.querySelector('.danger').onclick = () => {
+                        this.deleteProject(p.id, p.name);
+                    };
+                    listEl.appendChild(item);
+
+                    setTimeout(() => this.drawSparkline(p.id), 0);
+                });
+
+                this.root.querySelector('#add-project-btn').onclick = () => {
+                    const input = this.root.querySelector('#new-project-name');
+                    if (input.value.trim()) {
+                        this.addProject(input.value.trim());
+                        input.value = '';
+                    }
+                };
+            }
+
+            renderProjectSettings() {
+                const project = this.projects.find(p => p.id === this.selectedProjectId);
+                if (!project) {
+                    this.viewState = 'projects';
+                    this.render();
+                    return;
+                }
+
+                this.root.innerHTML = `
+                    <div class="header">
+                        <button class="button secondary" id="btn-back">Back to Projects</button>
+                        <h2>Project Settings: ${project.name}</h2>
+                        <div></div>
+                    </div>
+                    <div class="settings-container" style="background:#272422; padding:24px; border-radius:6px; max-width: 600px; margin: 0 auto;">
+                        <label style="display:block; margin-bottom:8px; font-weight:bold;">Project Name</label>
+                        <input type="text" id="setting-name" value="${project.name}" style="margin-bottom: 24px;">
+
+                        <label style="display:block; margin-bottom:8px; font-weight:bold;">Metric Label (Unit)</label>
+                        <input type="text" id="setting-metric" value="${project.metricLabel}" style="margin-bottom: 24px;">
+
+                        <label style="display:block; margin-bottom:16px; font-weight:bold;">Activity Colors (Levels 0-10)</label>
+                        <div id="color-pickers-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 24px;">
+                        </div>
+
+                        <div style="display: flex; gap: 12px; margin-top: 32px;">
+                            <button class="button secondary" id="btn-reset-colors">Reset to Defaults</button>
+                            <button class="button primary" id="btn-save" style="flex:1;">Save Changes</button>
+                        </div>
+                    </div>
+                `;
+
+                this.root.querySelector('#btn-back').onclick = () => {
+                    this.viewState = 'projects';
+                    this.render();
+                };
+
+                const colorsContainer = this.root.querySelector('#color-pickers-container');
+                
+                // Helper to convert rgb string to hex for input[type="color"]
+                const rgbToHex = (rgb) => {
+                    if (rgb.startsWith('#')) return rgb;
+                    const matches = rgb.match(/\d+/g);
+                    if (!matches) return '#000000';
+                    const [r, g, b] = matches.map(Number);
+                    return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+                };
+
+                // Render current colors
+                const renderColorInputs = (colorsStrArray) => {
+                    colorsContainer.innerHTML = '';
+                    colorsStrArray.forEach((colStr, i) => {
+                        const hex = rgbToHex(colStr);
+                        const wrap = document.createElement('div');
+                        wrap.innerHTML = `
+                            <label style="font-size: 12px; display:block; margin-bottom:4px; color: #a19a91;">Level ${i}</label>
+                            <input type="color" class="color-input" data-level="${i}" value="${hex}" style="width:100%; height:40px; padding:2px; cursor:pointer;">
+                        `;
+                        colorsContainer.appendChild(wrap);
+                    });
+                }
+
+                renderColorInputs(project.colors);
+
+                this.root.querySelector('#btn-reset-colors').onclick = () => {
+                    const defaultColors = Array.from({length: 11}, (_, i) => getIntensityColor(i));
+                    renderColorInputs(defaultColors);
+                };
+
+                this.root.querySelector('#btn-save').onclick = async () => {
+                    const newName = this.root.querySelector('#setting-name').value.trim();
+                    const newMetric = this.root.querySelector('#setting-metric').value.trim();
+                    if (!newName) {
+                        alert("Name cannot be empty");
+                        return;
+                    }
+
+                    const newColors = [];
+                    const inputs = this.root.querySelectorAll('.color-input');
+                    inputs.forEach(inp => {
+                        newColors.push(inp.value);
+                    });
+
+                    project.name = newName;
+                    project.metricLabel = newMetric || 'Activity level';
+                    project.colors = newColors;
+
+                    await put('projects', project);
+                    alert("Settings saved successfully!");
+                    
+                    this.viewState = 'projects';
+                    this.render();
+                };
+            }
+
+            drawSparkline(projectId, canvasId = null, targetYear = null) {
+                const project = this.projects.find(p => p.id === projectId);
+                if (!project) return;
+                
+                const canvas = this.root.querySelector(`#${canvasId || 'sparkline-' + projectId}`);
+                if (!canvas) return;
+
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+
+                const ctx = canvas.getContext('2d');
+                const year = targetYear || new Date().getFullYear();
+                const daysInYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
+                const projectActivities = this.allActivities[projectId] || {};
+
+                const data = [];
+                for (let i = 0; i < daysInYear; i++) {
+                    const date = new Date(year, 0, i + 1);
+                    const ds = formatDate(date);
+                    data.push(projectActivities[ds] || 0);
+                }
+
+                const maxVal = Math.max(...data, 1);
+                const width = canvas.width;
+                const height = canvas.height;
+                const stepX = width / (data.length - 1);
+
+                ctx.clearRect(0, 0, width, height);
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 2;
+
+                for (let i = 0; i < data.length - 1; i++) {
+                    const x1 = i * stepX;
+                    const y1 = height - (data[i] / maxVal) * (height - 4) - 2;
+                    const x2 = (i + 1) * stepX;
+                    const y2 = height - (data[i + 1] / maxVal) * (height - 4) - 2;
+
+                    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                    gradient.addColorStop(0, project.colors[data[i]]);
+                    gradient.addColorStop(1, project.colors[data[i + 1]]);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.strokeStyle = gradient;
+                    ctx.stroke();
+                }
+            }
+
+            renderYearView() {
+                const project = this.projects.find(p => p.id === this.selectedProjectId);
+                const year = this.currentDate.getFullYear();
+
+                this.root.innerHTML = `
+                    <div class="header">
+                        <button class="button secondary" id="btn-back">All Projects</button>
+                        <div class="year-nav">
+                            <button class="button small" id="prev-year">&lt;</button>
+                            <h2>${project ? project.name : ''} - ${year}</h2>
+                            <button class="button small" id="next-year">&gt;</button>
+                        </div>
+                        <div></div>
+                    </div>
+                    <div style="margin-bottom: 24px; height: 60px; width: 100%;">
+                        <canvas class="sparkline" id="sparkline-year"></canvas>
+                    </div>
+                    <div class="year-view-grid" id="year-grid"></div>
+                `;
+
+                setTimeout(() => this.drawSparkline(this.selectedProjectId, 'sparkline-year', year), 0);
+
+                this.root.querySelector('#btn-back').onclick = () => {
+                    this.viewState = 'projects';
+                    this.render();
+                };
+                this.root.querySelector('#prev-year').onclick = () => this.changeYear(-1);
+                this.root.querySelector('#next-year').onclick = () => this.changeYear(1);
+
+                const grid = this.root.querySelector('#year-grid');
+
+                for (let month = 0; month < 12; month++) {
+                    const monthEl = document.createElement('div');
+                    monthEl.className = 'year-month-container';
+                    const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long' });
+
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+
+                    let startOffset = firstDay.getDay() - 1;
+                    if (startOffset === -1) startOffset = 6;
+
+                    
+                    let totalHours = 0;
+                    for (let d = 1; d <= lastDay.getDate(); d++) {
+                        const date = new Date(year, month, d);
+                        const ds = formatDate(date);
+                        totalHours += this.activities[ds] || 0;
+                    }
+
+                    let monthHTML = `
+                        <div class="month-name">${monthName} <span class="year-view-month-total-hours">${ totalHours || '' }</span></div>
+                        <div class="calendar-grid">
+                            `;
+
+                    for (let i = 0; i < startOffset; i++) {
+                        monthHTML += `<div class="calendar-day empty"></div>`;
+                    }
+
+                    for (let d = 1; d <= lastDay.getDate(); d++) {
+                        const date = new Date(year, month, d);
+                        const ds = formatDate(date);
+                        const hours = this.activities[ds] || 0;
+                        const color = project.colors ? project.colors[hours] : getIntensityColor(hours);
+                        monthHTML += `<div class="calendar-day" style="background-color: ${color};">
+                            <div class="year-view-hours" >${ hours > 0 ? hours : ''}</div>
+                        </div>`;
+                    }
+
+                    monthHTML += `</div>`;
+                    monthEl.innerHTML = monthHTML;
+                    monthEl.onclick = () => {
+                        this.currentDate = new Date(year, month, 1);
+                        this.viewState = 'month';
+                        this.render();
+                    };
+                    grid.appendChild(monthEl);
+                }
+            }
+
+            renderMonthView() {
+                const project = this.projects.find(p => p.id === this.selectedProjectId);
+                const year = this.currentDate.getFullYear();
+                const month = this.currentDate.getMonth();
+                const monthName = this.currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                let startOffset = firstDay.getDay() - 1;
+                if (startOffset === -1) startOffset = 6;
+
+                let cells = [];
+                for (let i = 0; i < startOffset; i++) cells.push(null);
+                for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(year, month, d));
+                while(cells.length % 7 !== 0) cells.push(null);
+
+                console.log('Cells:', cells);
+                let totalHours = 0;
+                for( const nextCell of cells ) {
+                    if( nextCell ){
+                        const ds = formatDate(nextCell);
+                        totalHours += this.activities[ds] || 0;
+                    }
+                }
+                
+                this.root.innerHTML = `
+                    <div class="header">
+                        <button class="button secondary" id="btn-back">Up to Year</button>
+                        <h2>${monthName}</h2>
+                        <div></div>
+                        <div class="month-view-total-hours">Total: ${totalHours}</div>
+                    </div>
+                    <div class="month-view-header">
+                        <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div class="weekend">Sat</div><div class="weekend">Sun</div>
+                    </div>
+                    <div class="month-view-grid" id="month-grid"></div>
+                `;
+
+
+                this.root.querySelector('#btn-back').onclick = () => { this.viewState = 'year'; this.render(); };
+                const grid = this.root.querySelector('#month-grid');
+
+                for (let i=0; i<cells.length; i+=7) {
+                    const weekRow = cells.slice(i, i+7);
+                    weekRow.forEach(d => {
+                        const cell = document.createElement('div');
+                        if(!d) {
+                            cell.className = 'month-view-day';
+                            cell.style.background = project.colors ? project.colors[0] : '#3c3835';
+                        } else {
+                            const ds = formatDate(d);
+                            const note = this.notes[ds];
+                            const hours = this.activities[ds] || 0;
+                            const col = project.colors ? project.colors[hours] : getIntensityColor(hours);
+                            const wc = isWeekend(d) ? 'weekend' : '';
+                            cell.className = 'month-view-day';
+                            cell.style.background = col;
+                            cell.innerHTML = `
+                            <span class="${wc}" style="color: ${hours === 0 ? 'inherit' : '#1e1c1a' }; text-shadow: 0 0 2px rgba(255,255,255,0.2)">
+                                <div class="month-view-hours" >${hours}</div>
+                                ${d.getDate()}`
+                                + ( note ? `
+                                <div class="month-view-note note-badge" ><div class="note-tooltip">${note}</div></div>` : '') + 
+                                `
+                            </span>
+                            `;
+                            cell.onclick = () => {
+                                this.currentDate = d;
+                                this.viewState = 'day';
+                                this.render();
+                            };
+                        }
+                        grid.appendChild(cell);
+                    });
+                }
+            }
+
+            renderWeekView() {
+                const project = this.projects.find(p => p.id === this.selectedProjectId);
+                const weekDates = getWeekRange(this.currentDate);
+                const displayMonth = weekDates[0].toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+                this.root.innerHTML = `
+                    <div class="header">
+                        <button class="button secondary" id="btn-back">Up to Month</button>
+                        <h2>Week of ${displayMonth}</h2>
+                        <div></div>
+                    </div>
+                    <div class="week-view-container" id="week-grid"></div>
+                `;
+
+                this.root.querySelector('#btn-back').onclick = () => { this.viewState = 'month'; this.render(); };
+                const grid = this.root.querySelector('#week-grid');
+
+                const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+                weekDates.forEach((d, i) => {
+                    const col = document.createElement('div');
+                    col.className = 'week-day-col';
+                    const ds = formatDate(d);
+                    const hours = this.activities[ds] || 0;
+                    const color = project.colors ? project.colors[hours] : getIntensityColor(hours);
+                    const pct = (hours / 10) * 100;
+                    const wc = isWeekend(d) ? 'weekend' : '';
+                    const note = this.notes[ds]; 
+
+                    col.innerHTML = `
+                        <div style="font-weight:bold" class="${wc}">${dayNames[i]}</div>
+                        <div class="${wc}">${d.getDate()}</div>
+                        <div class="week-bar-container">
+                            <div class="week-bar-hours" >${hours}</div>
+                            <div class="week-bar-fill" style="height: ${pct}%; background: ${color};"></div>
+                            <div class="hash-marks">
+                                ${Array(3).fill('<div class="hash-mark"></div>').join('')}
+                            </div>
+                        </div>
+                        <button class="button secondary" style="margin-left:0; font-size:12px; padding:4px 8px;">open</button>
+                    `;
+
+                    if(note) {
+                        const badge = document.createElement('div');
+                        badge.className = 'note-badge';
+                        badge.innerHTML = `? <div class="note-tooltip">${note}</div>`;
+                        col.appendChild(badge);
+                    }
+
+                    col.querySelector('button').onclick = () => {
+                        this.currentDate = d;
+                        this.viewState = 'day';
+                        this.render();
+                    };
+
+                    grid.appendChild(col);
+                });
+            }
+
+            renderDayView() {
+                const project = this.projects.find(p => p.id === this.selectedProjectId);
+                const metricLabel = project && project.metricLabel ? project.metricLabel : 'Activity level';
+                const ds = formatDate(this.currentDate);
+                const currentActivity = this.activities[ds] || 0;
+                const currentNote = this.notes[ds] || '';
+
+                this.root.innerHTML = `
+                    <div class="header">
+                        <button class="button secondary" id="btn-back">Up to Month</button>
+                        <h2>Day: ${this.currentDate.toDateString()}</h2>
+                        <div></div>
+                    </div>
+                    <div class="day-view-container">
+                        <p>Click on the timeline to set ${metricLabel} (0-10): <strong id="act-label">${currentActivity}</strong></p>
+                        <div class="timeline" id="timeline"></div>
+                        <label style="font-weight:bold; display:block; margin: 16px 0 8px;">Notes (max 500 chars):</label>
+                        <textarea id="note-txt" maxlength="500" placeholder="What did you do today?">${currentNote}</textarea>
+                    </div>
+                `;
+
+                this.root.querySelector('#btn-back').onclick = () => { this.viewState = 'month'; this.render(); };
+
+                const txt = this.root.querySelector('#note-txt');
+                txt.onchange = async () => {
+                     const v = txt.value.trim();
+                     if(v) {
+                         this.notes[ds] = v;
+                         await put('notes', { id: this.selectedProjectId + '_' + ds, text: v });
+                     } else {
+                         delete this.notes[ds];
+                         await remove('notes', this.selectedProjectId + '_' + ds);
+                     }
+                };
+
+                const timeline = this.root.querySelector('#timeline');
+                const updateTimelineVisuals = (activeHours) => {
+                    timeline.innerHTML = '';
+                    for(let i=1; i<=10; i++) {
+                        const hr = document.createElement('div');
+                        hr.className = 'timeline-hour';
+                        const activeColor = project.colors ? project.colors[activeHours] : getIntensityColor(activeHours);
+                        const emptyColor = project.colors ? project.colors[0] : '#3c3835';
+                        const col = i <= activeHours ? activeColor : emptyColor;
+                        hr.innerHTML = `
+                            <div class="hour-num">${i}</div>
+                            <div class="hour-box" style="background:${col}"></div>
+                        `;
+
+                        hr.onclick = async () => {
+                            const newAct = i === activeHours ? (i - 1) : i; // allow unselecting
+                            this.activities[ds] = newAct;
+
+                            if (!this.allActivities[this.selectedProjectId]) {
+                                this.allActivities[this.selectedProjectId] = {};
+                            }
+                            this.allActivities[this.selectedProjectId][ds] = newAct;
+                            await put('activities', { id: this.selectedProjectId + '_' + ds, hours: newAct });
+
+                            this.root.querySelector('#act-label').textContent = newAct;
+                            updateTimelineVisuals(newAct);
+                        };
+                        timeline.appendChild(hr);
+                    }
+                };
+
+                updateTimelineVisuals(currentActivity);
+            }
+        }
+
+        return { ProjectManager };
+    });
+
+    // --- MODULE: APP INIT ---
+    DI.add('app', (di) => {
+        const { ProjectManager } = di.get('ProjectManager');
+        const root = document.getElementById('app');
+        const app = new ProjectManager(root);
+        app.init();
+    });
+
+    // --- BOOT THE APP ---
+    DI.get('app');
+    </script>
+</body>
+</html>
