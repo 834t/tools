@@ -6,6 +6,8 @@
     <title>Purpur Web Reference Board v2.6</title>
     <!-- Load PixiJS from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.0/pixi.min.js" integrity="sha512-NVWPDocxwt9T3NhwBzx3c8vhg2WqGVgehZ100xOySkvbfdhqQDJbvzlSBWyFkFJEPwta89jdpldx2BlggNURVQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Load JSZip from CDN (used by the ZIP export feature) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <style>
         /* Styles */
         body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; background-color: #333; color: #eee; display: flex; flex-direction: column; height: 100vh; font-size: 13px; }
@@ -25,6 +27,27 @@
         #context-menu button { display: block; width: 100%; text-align: left; margin-bottom: 3px; background-color: #5a5a5a; border: none; }
         #context-menu button:last-child { margin-bottom: 0; }
         #context-menu button:hover { background-color: #6a6a6a; }
+        /* Dropdown wrappers (Align / Export) */
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-menu { position: absolute; top: calc(100% + 4px); display: none; background-color: #484848; border: 1px solid #6a6a6a; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); padding: 6px; z-index: 1000; min-width: 170px; }
+        .dropdown-menu.open { display: block; }
+        #align-menu { left: 0; }
+        #export-panel { right: 0; }
+        .dropdown-menu button { display: block; width: 100%; text-align: left; margin-bottom: 3px; background-color: #5a5a5a; border: none; }
+        .dropdown-menu button:last-child { margin-bottom: 0; }
+        .dropdown-menu button:hover { background-color: #6a6a6a; }
+        /* Reset the global button-like styling for labels living inside dropdowns */
+        .dropdown-menu label.row { display: block; background: none; border: none; padding: 3px 4px; cursor: pointer; }
+        .dropdown-menu label.row:hover { background-color: #5a5a5a; }
+        .dropdown-menu label.row input { vertical-align: middle; margin-right: 6px; }
+        .dropdown-menu label.row.disabled { color: #888; cursor: default; }
+        .dropdown-menu label.row.disabled:hover { background: none; }
+        .dropdown-menu hr { border: none; border-top: 1px solid #5a5a5a; margin: 6px 0; }
+        .quality-row { align-items: center; gap: 6px; padding: 3px 4px; }
+        #export-quality { flex: 1; min-width: 80px; max-width: 100px; }
+        #export-quality-val { width: 22px; text-align: right; color: #bbb; }
+        #export-download { text-align: center; background-color: #77aaff; color: #111; margin-top: 4px; }
+        #export-download:hover { background-color: #99c0ff; }
     </style>
 </head>
 <body>
@@ -37,8 +60,29 @@
             <span class="separator"></span>
             <button id="layer-up" title="Bring Forward" disabled>↑</button>
             <button id="layer-down" title="Send Backward" disabled>↓</button>
+            <span class="separator"></span>
+            <div class="dropdown">
+                <button id="align-button" title="Align images into a grid">Align ▾</button>
+                <div id="align-menu" class="dropdown-menu">
+                    <button data-align="ultimate" title="Reflow ALL images into a uniform grid (destructive)">Ultimate</button>
+                    <button data-align="rows" title="Tidy each detected row">Rows</button>
+                    <button data-align="columns" title="Tidy each detected column">Columns</button>
+                </div>
+            </div>
         </div>
         <div class="controls-right">
+            <div class="dropdown">
+                <button id="export-button" title="Export all images as a ZIP">Export ZIP ▾</button>
+                <div id="export-panel" class="dropdown-menu">
+                    <label class="row"><input type="radio" name="export-mode" value="plain" checked>Plain</label>
+                    <label class="row" id="export-rows-row"><input type="radio" name="export-mode" value="rows" id="export-rows"><span id="export-rows-label">Rows</span></label>
+                    <label class="row" id="export-columns-row"><input type="radio" name="export-mode" value="columns" id="export-columns"><span id="export-columns-label">Columns</span></label>
+                    <hr>
+                    <label class="row"><input type="checkbox" id="export-webp">WebP</label>
+                    <label class="row quality-row" id="export-quality-row" style="display:none;"><span>Quality</span><input type="range" id="export-quality" min="0.1" max="1" step="0.1" value="0.8"><span id="export-quality-val">0.8</span></label>
+                    <button id="export-download">Download</button>
+                </div>
+            </div>
              <span class="info">Click to select, Drag for action, Right-click on selected for options</span>
             <button id="new-button">New Scene</button>
             <button id="save-button">Save Scene</button>
@@ -206,6 +250,7 @@
 
             setupDragAndDrop();
             setupControls(); // Includes context menu button setup
+            setupExportAlign(); // Align dropdown + ZIP export panel
             console.log("PixiJS initialized.");
 
             // Add listener to close context menu on any click outside of it
@@ -838,6 +883,360 @@
                 saveStateToDB({ images: [], container: {x:0, y:0, scaleX:1, scaleY:1} })
                     .then(() => console.log("Autosave cleared."))
                     .catch(err => console.error("Error clearing autosave:", err));
+            }
+        }
+
+        // --- Layout Solver (pure, non-destructive) ------------------------
+        // Produces "how the scene should look after align" as data. Two consumers:
+        //   - the Align button applies the geometry (moves sprites)
+        //   - the ZIP export reads only the (row, col) assignment for naming
+        // All measurements are in mainContainer-local (scene) space, so the
+        // current zoom/pan of the viewport never affects the result.
+
+        // Axis-aligned bounding box of a sprite in local scene space.
+        // w0/h0 are the resource's own scaled footprint (rotation ignored);
+        // w/h are the rotation-inflated AABB used for band separation.
+        function localBounds(sprite) {
+            const texW = (sprite.texture && sprite.texture.width) || 1;
+            const texH = (sprite.texture && sprite.texture.height) || 1;
+            const w0 = Math.abs(texW * sprite.scale.x);
+            const h0 = Math.abs(texH * sprite.scale.y);
+            const cos = Math.abs(Math.cos(sprite.rotation));
+            const sin = Math.abs(Math.sin(sprite.rotation));
+            const w = w0 * cos + h0 * sin;
+            const h = w0 * sin + h0 * cos;
+            return {
+                cx: sprite.x, cy: sprite.y, w, h, w0, h0,
+                left: sprite.x - w / 2, right: sprite.x + w / 2,
+                top: sprite.y - h / 2, bottom: sprite.y + h / 2,
+            };
+        }
+
+        // The set of sprites both align and export operate on (must match,
+        // so indices never get holes).
+        function getLayoutItems() {
+            return mainContainer.children
+                .filter(s => s instanceof PIXI.Sprite && s.base64src)
+                .map(s => ({ sprite: s, b: localBounds(s) }));
+        }
+
+        // Sweep items along one axis, splitting into bands wherever the next
+        // item does not overlap the running extent of the current band.
+        // axis 'y' => rows, 'x' => columns. Parameter-free (no magic tolerance).
+        function detectBands(items, axis) {
+            const lo = axis === 'y' ? 'top' : 'left';
+            const hi = axis === 'y' ? 'bottom' : 'right';
+            const sorted = items.slice().sort((a, b) => a.b[lo] - b.b[lo]);
+            const bands = [];
+            let cur = null;
+            for (const it of sorted) {
+                if (!cur || it.b[lo] > cur.max + 0.0001) {
+                    cur = { items: [it], max: it.b[hi] };
+                    bands.push(cur);
+                } else {
+                    cur.items.push(it);
+                    if (it.b[hi] > cur.max) cur.max = it.b[hi];
+                }
+            }
+            return bands;
+        }
+
+        // Reading order: top-to-bottom rows, left-to-right within each row.
+        function readingOrder(items) {
+            const out = [];
+            detectBands(items, 'y').forEach(band => {
+                band.items.slice().sort((a, b) => a.b.cx - b.b.cx).forEach(it => out.push(it));
+            });
+            return out;
+        }
+
+        // mode: 'rows' | 'columns' | 'ultimate'
+        // Returns { valid, grid:{rows,cols}, cells:[{sprite,row,col,targetX,targetY}] }.
+        function computeLayout(mode) {
+            const items = getLayoutItems();
+            if (!items.length) return { valid: false, grid: { rows: 0, cols: 0 }, cells: [] };
+            if (mode === 'ultimate') return ultimateLayout(items);
+
+            const axis = mode === 'rows' ? 'y' : 'x';
+            const bands = detectBands(items, axis);
+            const valid = bands.length >= 2; // a single band is degenerate (== Plain)
+            const cells = [];
+            let maxLen = 0;
+
+            bands.forEach((band, bi) => {
+                const ordered = band.items.slice().sort((a, b) =>
+                    axis === 'y' ? a.b.cx - b.b.cx : a.b.cy - b.b.cy);
+                maxLen = Math.max(maxLen, ordered.length);
+
+                // Uniform gap = average of current gaps inside this band.
+                const gaps = [];
+                for (let i = 1; i < ordered.length; i++) {
+                    gaps.push(axis === 'y'
+                        ? ordered[i].b.left - ordered[i - 1].b.right
+                        : ordered[i].b.top - ordered[i - 1].b.bottom);
+                }
+                const gap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+
+                if (axis === 'y') {
+                    // Rows: align to the top edge of the first item; inter-row Y untouched.
+                    const top = ordered[0].b.top;
+                    let runningLeft = ordered[0].b.left;
+                    ordered.forEach((it, c) => {
+                        if (c > 0) runningLeft += ordered[c - 1].b.w + gap;
+                        cells.push({
+                            sprite: it.sprite, row: bi, col: c,
+                            targetX: runningLeft + it.b.w / 2,
+                            targetY: top + it.b.h / 2,
+                        });
+                    });
+                } else {
+                    // Columns: align to the left edge of the first item; inter-column X untouched.
+                    const left = ordered[0].b.left;
+                    let runningTop = ordered[0].b.top;
+                    ordered.forEach((it, r) => {
+                        if (r > 0) runningTop += ordered[r - 1].b.h + gap;
+                        cells.push({
+                            sprite: it.sprite, row: r, col: bi,
+                            targetX: left + it.b.w / 2,
+                            targetY: runningTop + it.b.h / 2,
+                        });
+                    });
+                }
+            });
+
+            const grid = axis === 'y'
+                ? { rows: bands.length, cols: maxLen }
+                : { rows: maxLen, cols: bands.length };
+            return { valid, grid, cells };
+        }
+
+        // Ultimate: impose a fresh near-square grid on everything.
+        // Cell = (maxResourceWidth + 15) x (maxResourceHeight + 15), the two
+        // maxima taken independently (possibly from different images), all in
+        // local scene units. Images keep their order (reading order) and are
+        // centered inside their cell. Destructive when applied.
+        function ultimateLayout(items) {
+            const maxW = Math.max(...items.map(i => i.b.w0));
+            const maxH = Math.max(...items.map(i => i.b.h0));
+            const cellW = maxW + 15;
+            const cellH = maxH + 15;
+            const order = readingOrder(items);
+            const n = order.length;
+            const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+            const originX = Math.min(...items.map(i => i.b.left));
+            const originY = Math.min(...items.map(i => i.b.top));
+            const cells = order.map((it, k) => {
+                const c = k % cols;
+                const r = Math.floor(k / cols);
+                return {
+                    sprite: it.sprite, row: r, col: c, index: k,
+                    targetX: originX + c * cellW + cellW / 2,
+                    targetY: originY + r * cellH + cellH / 2,
+                };
+            });
+            return { valid: true, grid: { rows: Math.ceil(n / cols), cols }, cells };
+        }
+
+        // --- Align (apply the solver result to the scene) ----------------
+        function applyLayout(cells) {
+            cells.forEach(c => { c.sprite.x = c.targetX; c.sprite.y = c.targetY; });
+            updateSelectionBox();
+        }
+
+        function runAlign(mode) {
+            if (mode === 'ultimate') {
+                const ok = confirm(
+                    "Ultimate align will rearrange ALL images into a uniform grid.\n" +
+                    "The current layout will be permanently lost and cannot be undone.\n\nContinue?");
+                if (!ok) return;
+            }
+            const layout = computeLayout(mode);
+            if (!layout.cells.length) return;
+            applyLayout(layout.cells);
+            console.log(`Aligned (${mode}).`);
+        }
+
+        // --- ZIP Export --------------------------------------------------
+        function padIndex(n, width) { return String(n).padStart(width, '0'); }
+
+        function parseDataURL(src) {
+            const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(src || '');
+            if (!match) return null;
+            return { mime: match[1] || 'image/png', base64: !!match[2], data: match[3] };
+        }
+
+        function extFromMime(mime) {
+            const map = {
+                'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg',
+                'image/webp': '.webp', 'image/gif': '.gif', 'image/bmp': '.bmp',
+                'image/svg+xml': '.svg',
+            };
+            return map[mime] || ('.' + ((mime || 'image/png').split('/')[1] || 'img'));
+        }
+
+        // Per-image converter (fresh Image + canvas each call) so parallel/
+        // sequential conversions never clobber a shared singleton.
+        function reencodeToWebp(src, quality) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const can = document.createElement('canvas');
+                img.onload = () => {
+                    can.width = img.naturalWidth || img.width;
+                    can.height = img.naturalHeight || img.height;
+                    can.getContext('2d').drawImage(img, 0, 0);
+                    // If the browser cannot encode WebP it silently falls back
+                    // to PNG; we read the real type from the produced blob.
+                    can.toBlob(blob => resolve(blob), 'image/webp', quality);
+                };
+                img.onerror = () => resolve(null);
+                img.src = src;
+            });
+        }
+
+        // Build [{ name, src }] for the chosen export mode.
+        function buildExportEntries(mode) {
+            const items = getLayoutItems();
+            if (!items.length) return [];
+
+            if (mode === 'plain') {
+                const order = readingOrder(items);
+                const width = Math.max(2, String(order.length - 1).length);
+                return order.map((it, k) => ({ name: padIndex(k, width), src: it.sprite.base64src }));
+            }
+
+            const layout = computeLayout(mode); // 'rows' | 'columns'
+            const cells = layout.cells;
+            const maxRow = Math.max(...cells.map(c => c.row));
+            const maxCol = Math.max(...cells.map(c => c.col));
+            const rW = Math.max(2, String(maxRow).length);
+            const cW = Math.max(2, String(maxCol).length);
+            return cells.map(c => {
+                // Rows -> row_col, Columns -> col_row (numbering follows direction).
+                const name = mode === 'rows'
+                    ? `${padIndex(c.row, rW)}_${padIndex(c.col, cW)}`
+                    : `${padIndex(c.col, cW)}_${padIndex(c.row, rW)}`;
+                return { name, src: c.sprite.base64src };
+            });
+        }
+
+        async function buildAndDownloadZip(entries, useWebp, quality) {
+            if (typeof JSZip === 'undefined') { alert('JSZip failed to load. Check your connection.'); return; }
+            const zip = new JSZip();
+            for (const e of entries) {
+                let added = false;
+                if (useWebp) {
+                    const blob = await reencodeToWebp(e.src, quality);
+                    if (blob) { zip.file(e.name + extFromMime(blob.type), blob); added = true; }
+                }
+                if (!added) {
+                    const parsed = parseDataURL(e.src);
+                    if (parsed && parsed.base64) {
+                        zip.file(e.name + extFromMime(parsed.mime), parsed.data, { base64: true });
+                    } else if (parsed) {
+                        zip.file(e.name + extFromMime(parsed.mime), decodeURIComponent(parsed.data));
+                    }
+                }
+            }
+            const out = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(out);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `export_${Date.now()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            console.log(`Exported ${entries.length} image(s) to ZIP.`);
+        }
+
+        // --- Align / Export UI wiring ------------------------------------
+        function closeDropdowns() {
+            document.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+        }
+
+        function setupExportAlign() {
+            // Align dropdown
+            const alignButton = document.getElementById('align-button');
+            const alignMenu = document.getElementById('align-menu');
+            alignButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const open = alignMenu.classList.contains('open');
+                closeDropdowns();
+                if (!open) alignMenu.classList.add('open');
+            });
+            alignMenu.querySelectorAll('button[data-align]').forEach(btn => {
+                btn.addEventListener('click', () => { closeDropdowns(); runAlign(btn.dataset.align); });
+            });
+
+            // Export panel
+            const exportButton = document.getElementById('export-button');
+            const exportPanel = document.getElementById('export-panel');
+            const webpCheckbox = document.getElementById('export-webp');
+            const qualityRow = document.getElementById('export-quality-row');
+            const qualitySlider = document.getElementById('export-quality');
+            const qualityVal = document.getElementById('export-quality-val');
+            const downloadBtn = document.getElementById('export-download');
+
+            exportButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const open = exportPanel.classList.contains('open');
+                closeDropdowns();
+                if (!open) { analyzeExportOptions(); exportPanel.classList.add('open'); }
+            });
+            // Clicks inside the panel must not toggle it shut.
+            exportPanel.addEventListener('click', (e) => e.stopPropagation());
+
+            webpCheckbox.addEventListener('change', () => {
+                qualityRow.style.display = webpCheckbox.checked ? 'flex' : 'none';
+            });
+            qualitySlider.addEventListener('input', () => {
+                qualityVal.textContent = Number(qualitySlider.value).toFixed(1);
+            });
+            downloadBtn.addEventListener('click', doExport);
+
+            // Close dropdowns when clicking anywhere outside a dropdown wrapper.
+            window.addEventListener('pointerdown', (e) => {
+                if (!e.target.closest || !e.target.closest('.dropdown')) closeDropdowns();
+            });
+        }
+
+        // Lazy analysis: only runs when the export panel opens.
+        function analyzeExportOptions() {
+            const rows = computeLayout('rows');
+            const cols = computeLayout('columns');
+            const rowsRadio = document.getElementById('export-rows');
+            const colsRadio = document.getElementById('export-columns');
+            const rowsRow = document.getElementById('export-rows-row');
+            const colsRow = document.getElementById('export-columns-row');
+
+            rowsRadio.disabled = !rows.valid;
+            colsRadio.disabled = !cols.valid;
+            rowsRow.classList.toggle('disabled', !rows.valid);
+            colsRow.classList.toggle('disabled', !cols.valid);
+            document.getElementById('export-rows-label').textContent =
+                rows.valid ? `Rows (${rows.grid.rows}×${rows.grid.cols})` : 'Rows (no structure)';
+            document.getElementById('export-columns-label').textContent =
+                cols.valid ? `Columns (${cols.grid.rows}×${cols.grid.cols})` : 'Columns (no structure)';
+
+            // If the currently selected mode just became unavailable, fall back to Plain.
+            const checked = document.querySelector('input[name="export-mode"]:checked');
+            if (checked && checked.disabled) {
+                document.querySelector('input[name="export-mode"][value="plain"]').checked = true;
+            }
+        }
+
+        async function doExport() {
+            const mode = document.querySelector('input[name="export-mode"]:checked').value;
+            const useWebp = document.getElementById('export-webp').checked;
+            const quality = Number(document.getElementById('export-quality').value);
+            closeDropdowns();
+            const entries = buildExportEntries(mode);
+            if (!entries.length) { alert('Nothing to export.'); return; }
+            try {
+                await buildAndDownloadZip(entries, useWebp, quality);
+            } catch (err) {
+                console.error('Export failed:', err);
+                alert('Export failed. Check the console for details.');
             }
         }
 
